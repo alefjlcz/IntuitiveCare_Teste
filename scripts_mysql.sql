@@ -1,30 +1,42 @@
 -- =============================================================================
--- TESTE 3: BANCO DE DADOS E ANÁLISE SQL
+-- TESTE 3: BANCO DE DADOS E ANÁLISE SQL (Completo)
 -- =============================================================================
 
-/* --- JUSTIFICATIVAS TÉCNICAS (Trade-offs) ---
+/* =============================================================================
+   3.2 e 3.3 - JUSTIFICATIVAS TÉCNICAS E ANÁLISE CRÍTICA (Respondendo ao PDF)
+   =============================================================================
 
-   1. Normalização vs Desnormalização:
-      Optei por uma abordagem HÍBRIDA.
-      - Tabela 'operadoras_cadastral': Normalizada. Dados cadastrais mudam pouco e ocupam espaço se repetidos.
-      - Tabela 'despesas_trimestrais': Desnormalizada (Star Schema). Focada em performance de leitura
-        para evitar muitos JOINs em queries de agregação massiva.
+   [A] TRADE-OFF: NORMALIZAÇÃO (Opção B Escolhida)
+       Optei por separar os dados em duas tabelas: 'operadoras_cadastral' e 'despesas_trimestrais'.
+       - Motivo 1 (Manutenibilidade): Dados cadastrais (Razão Social, UF) mudam pouco. Se a operadora mudar de nome, atualizo em apenas 1 lugar.
+       - Motivo 2 (Performance): A tabela de despesas fica mais leve (menos colunas de texto repetido), acelerando as queries de soma.
 
-      Justificativa: Como o volume de dados da ANS é médio/alto e a frequência de atualização é trimestral,
-      priorizei a performance de consulta analítica.
+   [B] TRADE-OFF: TIPOS DE DADOS
+       - Monetário: Usei DECIMAL(15, 2).
+         Justificativa: Tipos FLOAT/DOUBLE introduzem erros de arredondamento em ponto flutuante.
+         Para dados contábeis da ANS, a precisão exata dos centavos é obrigatória.
+       - Datas: Usei DATE.
+         Justificativa: Não é necessário armazenar hora/minuto (TIMESTAMP) para dados de balanço trimestral.
 
-   2. Tipos de Dados Monetários:
-      Escolha: DECIMAL(15, 2)
-      Justificativa: FLOAT/DOUBLE podem ter erros de precisão em cálculos financeiros.
-      DECIMAL garante a precisão exata dos centavos, essencial para relatórios contábeis.
+   [C] ANÁLISE CRÍTICA DA IMPORTAÇÃO (Tratamento de Inconsistências)
+       Conforme solicitado no item 3.3, identifiquei os seguintes problemas nos CSVs brutos:
+       1. Strings em campos numéricos (ex: "1.234,56").
+       2. Valores NULL/Vazios em chaves primárias.
+       3. Codificação de texto (Latin1 vs UTF-8).
+
+       SOLUÇÃO ADOTADA: Pipeline de ETL em Python.
+       Em vez de importar "lixo" para o banco e tentar limpar com SQL, utilizei o Pandas (Python) para:
+       - Converter vírgulas para pontos.
+       - Remover operadoras sem identificação.
+       - Gerar um CSV limpo e padronizado ('despesas_agregadas.csv') pronto para carga.
 */
 
 -- =============================================================================
--- 3.2 DDL - CRIAÇÃO DAS TABELAS
+-- DDL - ESTRUTURAÇÃO DAS TABELAS
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS operadoras_cadastral (
-    registro_ans INT PRIMARY KEY,
+    registro_ans INT PRIMARY KEY COMMENT 'Código único da operadora (PK)',
     razao_social VARCHAR(255),
     cnpj VARCHAR(20),
     uf CHAR(2)
@@ -33,44 +45,46 @@ CREATE TABLE IF NOT EXISTS operadoras_cadastral (
 CREATE TABLE IF NOT EXISTS despesas_trimestrais (
     id INT AUTO_INCREMENT PRIMARY KEY,
     registro_ans INT,
-    trimestre VARCHAR(10), -- Ex: '1T2023'
+    trimestre VARCHAR(10) COMMENT 'Ex: 1T2023',
     data_referencia DATE,
-    valor_despesa DECIMAL(15, 2),
+    valor_despesa DECIMAL(15, 2) COMMENT 'Precisão monetária garantida',
     FOREIGN KEY (registro_ans) REFERENCES operadoras_cadastral(registro_ans)
 );
 
--- Index para acelerar busca por trimestre e operadora
-CREATE INDEX idx_tempo ON despesas_trimestrais(data_referencia);
-CREATE INDEX idx_operadora ON despesas_trimestrais(registro_ans);
+CREATE INDEX idx_analise_temporal ON despesas_trimestrais(data_referencia);
+CREATE INDEX idx_analise_geo ON operadoras_cadastral(uf);
 
 -- =============================================================================
 -- 3.4 QUERIES ANALÍTICAS
 -- =============================================================================
 
--- QUERY 1: Quais as 5 operadoras com maior crescimento percentual de despesas
--- entre o primeiro e o último trimestre analisado?
+-- QUERY 1: Top 5 operadoras com maior crescimento (%) entre 1º e Último Trimestre
+-- Desafio: Operadoras podem não ter dados em todos os trimestres.
+-- Solução: Utilizei INNER JOIN para considerar apenas operadoras que existem em AMBOS os períodos,
+-- garantindo que o cálculo de crescimento seja matemático e justo.
 WITH despesas_inicio AS (
     SELECT registro_ans, SUM(valor_despesa) as total_ini
     FROM despesas_trimestrais
-    WHERE trimestre = '1T2023' -- Exemplo do primeiro trimestre
+    WHERE trimestre = '1T2023'
     GROUP BY registro_ans
 ),
 despesas_fim AS (
     SELECT registro_ans, SUM(valor_despesa) as total_fim
     FROM despesas_trimestrais
-    WHERE trimestre = '3T2023' -- Exemplo do último trimestre
+    WHERE trimestre = '3T2023'
     GROUP BY registro_ans
 )
 SELECT
     c.razao_social,
-    ((f.total_fim - i.total_ini) / i.total_ini) * 100 as crescimento_pct
+    CONCAT(ROUND(((f.total_fim - i.total_ini) / i.total_ini) * 100, 2), '%') as crescimento_pct
 FROM despesas_inicio i
 JOIN despesas_fim f ON i.registro_ans = f.registro_ans
 JOIN operadoras_cadastral c ON i.registro_ans = c.registro_ans
-ORDER BY crescimento_pct DESC
+ORDER BY ((f.total_fim - i.total_ini) / i.total_ini) DESC
 LIMIT 5;
 
--- QUERY 2: Distribuição de despesas por UF e Média por operadora
+-- QUERY 2: Top 5 Estados com maiores despesas e Média por Operadora
+-- Desafio: Calcular agregado (Soma) e média granular na mesma query.
 SELECT
     c.uf,
     SUM(d.valor_despesa) as total_despesas_estado,
@@ -81,26 +95,25 @@ GROUP BY c.uf
 ORDER BY total_despesas_estado DESC
 LIMIT 5;
 
--- QUERY 3: Operadoras com despesas acima da média em pelo menos 2 trimestres
-WITH media_geral_trimestre AS (
-    SELECT trimestre, AVG(valor_despesa) as media_mercado
+-- QUERY 3: Operadoras acima da média em 2+ trimestres
+-- Trade-off: Utilizei CTEs (Common Table Expressions) para legibilidade, dividindo o problema
+-- em "Calcular Média do Mercado" -> "Comparar Operadora" -> "Contar Ocorrências".
+WITH media_mercado AS (
+    SELECT trimestre, AVG(valor_despesa) as media_geral
     FROM despesas_trimestrais
     GROUP BY trimestre
 ),
-performance_operadora AS (
+performance AS (
     SELECT
         d.registro_ans,
-        d.trimestre,
-        d.valor_despesa,
-        m.media_mercado,
-        CASE WHEN d.valor_despesa > m.media_mercado THEN 1 ELSE 0 END as acima_media
+        CASE WHEN d.valor_despesa > m.media_geral THEN 1 ELSE 0 END as superou_media
     FROM despesas_trimestrais d
-    JOIN media_geral_trimestre m ON d.trimestre = m.trimestre
+    JOIN media_mercado m ON d.trimestre = m.trimestre
 )
 SELECT
     c.razao_social,
-    SUM(p.acima_media) as trimestres_acima_media
-FROM performance_operadora p
+    SUM(p.superou_media) as trimestres_acima_da_media
+FROM performance p
 JOIN operadoras_cadastral c ON p.registro_ans = c.registro_ans
 GROUP BY c.razao_social
-HAVING trimestres_acima_media >= 2;
+HAVING trimestres_acima_da_media >= 2;
