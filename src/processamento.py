@@ -1,112 +1,184 @@
-import zipfile
-import os
 import pandas as pd
-import csv
-
-PASTA_DOWNLOADS = "downloads_ans"
-ARQUIVO_SAIDA = "consolidado_despesas.csv"
+import os
+import glob
 
 
-def carregar_dicionario_operadoras():
-    caminho_cadop = os.path.join(PASTA_DOWNLOADS, "Relatorio_Cadop.csv")
-    dicionario = {}
-
-    if not os.path.exists(caminho_cadop):
-        print("⚠️ Arquivo Relatorio_Cadop.csv não encontrado.")
-        return dicionario
-
-    print("📖 Carregando dicionário de operadoras...")
+def ler_csv_blindado(arquivo, separador=';', pular_linhas=0):
+    """Lê CSV tentando UTF-8 e depois CP1252"""
     try:
-        # CORREÇÃO AQUI: Mudamos de 'latin-1' para 'utf-8'
-        # O separador continua ';', mas o encoding do site da ANS para esse arquivo é utf-8
-        df_ops = pd.read_csv(caminho_cadop, sep=';', encoding='utf-8', dtype=str)
-
-        # Limpa nomes das colunas
-        df_ops.columns = [c.strip() for c in df_ops.columns]
-
-        for _, row in df_ops.iterrows():
-            reg = row.get('REGISTRO_OPERADORA', '')
-            if reg:
-                dicionario[reg] = {
-                    'CNPJ': row.get('CNPJ', 'N/A'),
-                    'RazaoSocial': row.get('Razao_Social', 'N/A')
-                }
-        print(f"✅ Dicionário carregado: {len(dicionario)} operadoras mapeadas.")
-    except UnicodeDecodeError:
-        # Fallback: Se der erro com UTF-8, tenta Latin-1 (plano B)
-        print("⚠️ UTF-8 falhou, tentando Latin-1...")
-        df_ops = pd.read_csv(caminho_cadop, sep=';', encoding='latin-1', dtype=str)
-        # (Repete a lógica se cair aqui...)
-        # Para simplificar, assumimos que vai funcionar com UTF-8 pois seus caracteres indicam isso.
-    except Exception as e:
-        print(f"❌ Erro ao ler operadoras: {e}")
-
-    return dicionario
+        # Se for um caminho de arquivo (string)
+        if isinstance(arquivo, str):
+            return pd.read_csv(arquivo, sep=separador, encoding='utf-8', dtype=str, skiprows=pular_linhas)
+        # Se for um objeto de arquivo (file-like)
+        arquivo.seek(0)
+        return pd.read_csv(arquivo, sep=separador, encoding='utf-8', dtype=str, skiprows=pular_linhas)
+    except:
+        if isinstance(arquivo, str):
+            return pd.read_csv(arquivo, sep=separador, encoding='cp1252', dtype=str, skiprows=pular_linhas)
+        arquivo.seek(0)
+        return pd.read_csv(arquivo, sep=separador, encoding='cp1252', dtype=str, skiprows=pular_linhas)
 
 
-def processar_arquivos():
-    print("--- 🏭 INICIANDO PROCESSAMENTO E LIMPEZA DE DADOS ---")
+def encontrar_inicio_cabecalho(caminho_arquivo):
+    """Caça a linha onde começa o cabeçalho real"""
+    if not os.path.exists(caminho_arquivo): return 0
+    try:
+        with open(caminho_arquivo, 'r', encoding='cp1252', errors='ignore') as f:
+            for i, linha in enumerate(f):
+                linha_upper = linha.upper()
+                # Procura por colunas chave do Cadop
+                if 'CNPJ' in linha_upper and ('RAZAO' in linha_upper or 'REGISTRO' in linha_upper):
+                    return i
+                if i > 20: break
+    except:
+        pass
+    return 0
 
-    mapa_operadoras = carregar_dicionario_operadoras()
-    dados_consolidados = []
 
-    arquivos_zip = [f for f in os.listdir(PASTA_DOWNLOADS) if f.endswith('.zip')]
+def processar_arquivos_zip():
+    print("--- 1. INICIANDO O PROCESSO DE UNIFICAÇÃO (MERGE) ---")
 
-    for zip_nome in arquivos_zip:
-        caminho_completo = os.path.join(PASTA_DOWNLOADS, zip_nome)
+    # 1. DEFINIÇÃO DE CAMINHOS (Baseado no que você me disse)
+    # Pega a pasta onde está este script (src) e sobe um nível para ir à raiz
+    DIRETORIO_SRC = os.path.dirname(os.path.abspath(__file__))
+    DIRETORIO_RAIZ = os.path.dirname(DIRETORIO_SRC)
 
-        ano = "2025"
-        trimestre = zip_nome[0]
-        if "2024" in zip_nome: ano = "2024"
-        if "2023" in zip_nome: ano = "2023"
+    PASTA_DOWNLOADS = os.path.join(DIRETORIO_RAIZ, "downloads_ans")
 
-        try:
-            with zipfile.ZipFile(caminho_completo, 'r') as z:
-                csv_nome = [f for f in z.namelist() if f.endswith('.csv')][0]
+    print(f"📍 Raiz do Projeto: {DIRETORIO_RAIZ}")
+    print(f"📍 Pasta Downloads: {PASTA_DOWNLOADS}")
 
-                with z.open(csv_nome) as f:
-                    print(f"🔄 Processando {csv_nome}...")
+    # --- ETAPA A: PREPARAR O CADASTRO (CADOP) ---
+    caminho_cadop = os.path.join(PASTA_DOWNLOADS, "Relatorio_Cadop.csv")
+    df_cadastro = pd.DataFrame()
 
-                    # Mantemos latin-1 aqui pois os arquivos ZIP antigos da ANS costumam ser latin-1
-                    chunks = pd.read_csv(f, sep=';', encoding='latin-1', chunksize=5000, decimal=',', thousands='.')
+    if os.path.exists(caminho_cadop):
+        print(f"📂 Lendo Cadop em: {caminho_cadop}")
+        linha_cabecalho = encontrar_inicio_cabecalho(caminho_cadop)
+        df_cadastro = ler_csv_blindado(caminho_cadop, pular_linhas=linha_cabecalho)
 
-                    for chunk in chunks:
-                        filtro_assunto = chunk['DESCRICAO'].str.contains('EVENTOS|SINISTROS', case=False, na=False)
-                        df_filtrado = chunk[filtro_assunto].copy()
+        # Padroniza colunas
+        df_cadastro.columns = [str(c).strip().upper() for c in df_cadastro.columns]
 
-                        if not df_filtrado.empty:
-                            # Limpeza de valores
-                            df_filtrado['VL_SALDO_FINAL'] = pd.to_numeric(df_filtrado['VL_SALDO_FINAL'],
-                                                                          errors='coerce')
-                            df_filtrado = df_filtrado[df_filtrado['VL_SALDO_FINAL'] > 0]
+        # LISTA ATUALIZADA DE NOMES POSSÍVEIS (Incluindo REGISTRO_OPERADORA)
+        col_id = next(
+            (c for c in ['REGISTRO_OPERADORA', 'REGISTRO_ANS', 'CD_OPERADORA', 'REG_ANS'] if c in df_cadastro.columns),
+            None)
+        col_cnpj = next((c for c in ['CNPJ'] if c in df_cadastro.columns), None)
+        col_uf = next((c for c in ['UF', 'SG_UF'] if c in df_cadastro.columns), None)
+        col_nome = next((c for c in ['RAZAO_SOCIAL', 'NM_RAZAO_SOCIAL', 'NOME_FANTASIA'] if c in df_cadastro.columns),
+                        None)
 
-                            if not df_filtrado.empty:
-                                # Join
-                                df_filtrado['CNPJ'] = df_filtrado['REG_ANS'].astype(str).apply(
-                                    lambda x: mapa_operadoras.get(x, {}).get('CNPJ', 'N/A'))
-                                df_filtrado['RazaoSocial'] = df_filtrado['REG_ANS'].astype(str).apply(
-                                    lambda x: mapa_operadoras.get(x, {}).get('RazaoSocial', 'N/A'))
+        if col_id and col_cnpj:
+            # Renomeia para o padrão interno
+            cols_selecionadas = {col_id: 'Registro_ANS', col_cnpj: 'CNPJ'}
+            if col_uf: cols_selecionadas[col_uf] = 'UF'
+            if col_nome: cols_selecionadas[col_nome] = 'Razao_Social'
 
-                                df_filtrado['Ano'] = ano
-                                df_filtrado['Trimestre'] = trimestre
+            df_cadastro = df_cadastro.rename(columns=cols_selecionadas)
+            df_cadastro = df_cadastro[list(cols_selecionadas.values())]
 
-                                colunas_finais = ['CNPJ', 'RazaoSocial', 'Trimestre', 'Ano', 'VL_SALDO_FINAL']
-                                if all(col in df_filtrado.columns for col in
-                                       ['CNPJ', 'RazaoSocial', 'Trimestre', 'Ano', 'VL_SALDO_FINAL']):
-                                    df_final = df_filtrado[colunas_finais]
-                                    df_final.columns = ['CNPJ', 'RazaoSocial', 'Trimestre', 'Ano', 'ValorDespesas']
-                                    dados_consolidados.append(df_final)
-
-        except Exception as e:
-            print(f"❌ Erro ao processar {zip_nome}: {e}")
-
-    if dados_consolidados:
-        print("💾 Salvando arquivo consolidado...")
-        df_total = pd.concat(dados_consolidados, ignore_index=True)
-
-        # Mantemos utf-8-sig para o Excel abrir bonito
-        df_total.to_csv(ARQUIVO_SAIDA, index=False, sep=';', encoding='utf-8-sig')
-
-        print(f"✅ SUCESSO! Arquivo limpo gerado com {len(df_total)} linhas.")
+            # Limpa o ID
+            df_cadastro['Registro_ANS'] = df_cadastro['Registro_ANS'].astype(str).str.replace(r'\.0$', '', regex=True)
+            print(f"✅ Cadastro carregado: {len(df_cadastro)} registros.")
+        else:
+            print(f"⚠️ ERRO: Não achei as colunas no Cadop. Disponíveis: {list(df_cadastro.columns)}")
+            df_cadastro = pd.DataFrame()
     else:
-        print("⚠️ Nenhum dado relevante restou após os filtros.")
+        print(f"❌ Arquivo não encontrado: {caminho_cadop}")
+
+    # --- ETAPA B: PREPARAR O FINANCEIRO ---
+    print("📂 Procurando arquivos financeiros na Raiz e Downloads...")
+    dfs_financeiros = []
+
+    # Procura CSVs soltos na Raiz (consolidado_despesas, etc) ou ZIPs em Downloads
+    arquivos_csv_raiz = glob.glob(os.path.join(DIRETORIO_RAIZ, "*despesas*.csv"))
+
+    # Se achou CSVs na raiz, usa eles (Prioridade)
+    if arquivos_csv_raiz:
+        for arquivo in arquivos_csv_raiz:
+            print(f"   -> Processando CSV: {os.path.basename(arquivo)}")
+            try:
+                df_temp = ler_csv_blindado(arquivo)
+                df_temp.columns = [str(c).strip().upper() for c in df_temp.columns]
+
+                col_id_fin = next(
+                    (c for c in ['REG_ANS', 'CD_OPERADORA', 'REGISTRO_OPERADORA'] if c in df_temp.columns), None)
+                col_valor = next((c for c in ['VL_SALDO_FINAL', 'DESPESA', 'VALOR'] if c in df_temp.columns), None)
+
+                if col_id_fin and col_valor:
+                    temp_clean = pd.DataFrame()
+                    temp_clean['Registro_ANS'] = df_temp[col_id_fin].astype(str).str.replace(r'\.0$', '', regex=True)
+                    temp_clean['Total_Despesas'] = df_temp[col_valor].astype(str).str.replace('.', '',
+                                                                                              regex=False).str.replace(
+                        ',', '.', regex=False)
+                    temp_clean['Total_Despesas'] = pd.to_numeric(temp_clean['Total_Despesas'], errors='coerce').fillna(
+                        0)
+                    temp_clean = temp_clean[temp_clean['Total_Despesas'] > 0]
+                    dfs_financeiros.append(temp_clean)
+            except Exception as e:
+                print(f"Erro ao ler {arquivo}: {e}")
+
+    # Se não achou na raiz, tenta os ZIPs na pasta downloads (Plano B)
+    if not dfs_financeiros:
+        import zipfile
+        arquivos_zip = glob.glob(os.path.join(PASTA_DOWNLOADS, "*.zip"))
+        for arquivo in arquivos_zip:
+            try:
+                with zipfile.ZipFile(arquivo, 'r') as z:
+                    for csv_nome in z.namelist():
+                        if csv_nome.endswith(".csv"):
+                            with z.open(csv_nome) as f:
+                                # (Mesma lógica de leitura...)
+                                df_temp = ler_csv_blindado(f)
+                                df_temp.columns = [str(c).strip().upper() for c in df_temp.columns]
+                                col_id_fin = next((c for c in ['REG_ANS', 'CD_OPERADORA'] if c in df_temp.columns),
+                                                  None)
+                                col_valor = next((c for c in ['VL_SALDO_FINAL', 'DESPESA'] if c in df_temp.columns),
+                                                 None)
+                                if col_id_fin and col_valor:
+                                    temp_clean = pd.DataFrame()
+                                    temp_clean['Registro_ANS'] = df_temp[col_id_fin].astype(str).str.replace(r'\.0$',
+                                                                                                             '',
+                                                                                                             regex=True)
+                                    temp_clean['Total_Despesas'] = df_temp[col_valor].astype(str).str.replace('.', '',
+                                                                                                              regex=False).str.replace(
+                                        ',', '.', regex=False)
+                                    temp_clean['Total_Despesas'] = pd.to_numeric(temp_clean['Total_Despesas'],
+                                                                                 errors='coerce').fillna(0)
+                                    temp_clean = temp_clean[temp_clean['Total_Despesas'] > 0]
+                                    dfs_financeiros.append(temp_clean)
+            except:
+                pass
+
+    if not dfs_financeiros:
+        print("❌ Nenhum dado financeiro encontrado (Nem na raiz, nem em ZIPs).")
+        return None
+
+    df_financeiro = pd.concat(dfs_financeiros, ignore_index=True)
+    df_financeiro = df_financeiro.groupby('Registro_ANS')['Total_Despesas'].sum().reset_index()
+
+    # --- ETAPA C: O GRANDE ENCONTRO ---
+    print("🔄 Cruzando Financeiro com Cadastro...")
+
+    if not df_cadastro.empty and 'Registro_ANS' in df_cadastro.columns:
+        df_final = pd.merge(df_financeiro, df_cadastro, on='Registro_ANS', how='left')
+    else:
+        print("⚠️ Usando apenas dados financeiros (Cadastro falhou).")
+        df_final = df_financeiro
+        df_final['Razao_Social'] = 'Operadora ' + df_final['Registro_ANS']
+        df_final['UF'] = 'Indefinido'
+        df_final['CNPJ'] = 'Não informado'
+
+    # Preenchimento final de segurança
+    if 'Razao_Social' in df_final.columns:
+        df_final['Razao_Social'] = df_final['Razao_Social'].fillna('Operadora ' + df_final['Registro_ANS'])
+
+    for col in ['UF', 'CNPJ']:
+        if col not in df_final.columns:
+            df_final[col] = 'Indefinido'
+        else:
+            df_final[col] = df_final[col].fillna('Indefinido')
+
+    print(f"🏁 Processamento concluído! Total: {len(df_final)}")
+    return df_final

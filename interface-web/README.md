@@ -1,60 +1,54 @@
-# Teste Técnico - Engenharia de Dados e Fullstack
-**Candidato:** Alessandro Barbosa
+# Teste Técnico - IntuitiveCare
 
 ## Visão Geral do Projeto
 
-Este projeto apresenta uma solução completa de automação e visualização de dados para o desafio proposto pela IntuitiveCare. O sistema consiste em um pipeline de dados (ETL) que coleta demonstrações financeiras de operadoras de saúde diretamente do portal da ANS, normaliza essas informações em um banco de dados relacional e as expõe através de uma API REST consumida por uma interface web.
+Este projeto apresenta uma solução completa de automação e visualização de dados para o desafio proposto pela IntuitiveCare. O sistema consiste em um pipeline de dados que coleta demonstrações financeiras de operadoras de saúde diretamente do portal da ANS, normaliza essas informações em um banco de dados relacional e as expõe através de uma API REST consumida por uma interface web moderna.
 
-O desenvolvimento foi norteado pelos princípios de arquitetura limpa e simplicidade (KISS), visando garantir a facilidade de execução em diferentes ambientes e a manutenibilidade do código.
+O desenvolvimento foi norteado pelos princípios de arquitetura limpa e simplicidade, visando garantir a resiliência do código e a facilidade de execução pelo avaliador.
 
 ---
 
 ## Stack Tecnológico e Decisões de Arquitetura
 
 ### Backend (Python 3.13)
-* **FastAPI:** Framework selecionado pela alta performance (ASGI) e pela geração automática de documentação técnica (OpenAPI/Swagger), otimizando o tempo de desenvolvimento em comparação ao Flask.
-* **SQLite:** Banco de dados relacional embarcado. A escolha elimina a necessidade de configuração de servidores de banco de dados locais (como MySQL ou PostgreSQL) por parte do avaliador, garantindo execução imediata.
-    * *Nota:* Scripts DDL e DML compatíveis com MySQL Enterprise foram fornecidos separadamente no arquivo `src/scripts_mysql.sql`.
-* **Pandas & BeautifulSoup4:** Motor de ETL. Implementação de um crawler dinâmico que mapeia a estrutura de diretórios da ANS para identificar arquivos recentes, mitigando a quebra de links estáticos ("hardcoded").
+* **FastAPI:** Framework selecionado pela alta performance assíncrona  e pela geração automática de documentação via Swagger UI.
+* **SQLite:** Banco de dados relacional embarcado. Escolhido pela portabilidade, eliminando a necessidade de configuração de servidores externos para a avaliação do teste.
+* **Pandas:** Motor principal de ETL, utilizado para a limpeza, transformação e consolidação de grandes volumes de dados provenientes de múltiplos arquivos CSV e ZIP.
 
 ### Frontend (Vue.js 3 + Vite)
-* **Vue 3 (Composition API):** Utilizado para construção de uma interface reativa e modular.
-* **Fetch API:** A camada de comunicação HTTP utiliza recursos nativos do navegador, dispensando bibliotecas externas como Axios para reduzir o tamanho do bundle final.
-* **Gestão de Estado:** O estado da aplicação é gerenciado localmente via `Ref` e `Reactive`, evitando a complexidade desnecessária de stores globais (Pinia/Redux) para o escopo deste teste.
+* **Vue 3 (Composition API):** Utilizado para a construção de uma interface reativa, modular e de alto desempenho.
+* **Chart.js:** Biblioteca integrada para a visualização dinâmica de dados estatísticos por meio de gráficos de barras.
+* **Fetch API Nativa:** Opção técnica para manter o projeto leve, utilizando recursos nativos do navegador para comunicação assíncrona com a API.
 
 ---
 
 ## Diferenciais Técnicos e Resiliência
 
-1.  **Resiliência a Estrutura de Dados:**
-    A camada de apresentação (Frontend) implementa lógica defensiva para lidar com variações na nomenclatura das chaves JSON (ex: `Razao_Social` vs `razao_social`) e na estrutura de resposta da API (listas planas vs objetos paginados), garantindo estabilidade mesmo diante de alterações no Backend.
+1. **Busca Híbrida e Inteligente:**
+   A API e o Frontend foram projetados para realizar buscas simultâneas por Razão Social, CNPJ ou Registro ANS em um único campo. O sistema aplica sanitização de strings, permitindo que buscas por CNPJ funcionem com ou sem pontuação (ex: "04.201.372/0014-51" ou "04201372001451").
 
-2.  **Tratamento de Encoding:**
-    O pipeline de dados aplica codificação `utf-8-sig` nos arquivos gerados, assegurando a correta renderização de caracteres especiais da língua portuguesa em softwares de planilha (Excel).
+2. **Pipeline de Dados com Merge Cadastral:**
+   O processo ETL não apenas extrai dados financeiros, mas realiza um cruzamento (Merge) com o Cadastro de Operadoras (Cadop). Isso garante que o sistema exiba informações completas, incluindo a UF correta e o CNPJ oficial de cada instituição.
 
-3.  **Sanitização e Consistência:**
-    Registros com inconsistências financeiras ou dados cadastrais nulos são tratados durante o processamento para assegurar a integridade das métricas estatísticas apresentadas.
+3. **Resiliência a Encoding e Estrutura:**
+   O processador de dados implementa lógica de "leitura blindada", detectando automaticamente o encoding dos arquivos (UTF-8 ou CP1252/Latin-1) para evitar corrupção de caracteres especiais. Além disso, o sistema ignora automaticamente metadados ou linhas de cabeçalho inconsistentes nos arquivos da ANS.
+
+4. **Interface Gerencial:**
+   Inclusão de um dashboard estatístico que exibe o "Top 10 Estados" por volume de despesas, além de um modal detalhado que apresenta a ficha consolidada de cada operadora.
 
 ---
 
 ## Instruções de Instalação e Execução
 
-O projeto opera em arquitetura cliente-servidor. É necessário executar os serviços simultaneamente em terminais distintos.
+O projeto opera em arquitetura cliente-servidor. É necessário executar os serviços em terminais distintos.
 
-### 1. Backend (API e Processamento)
-Instale as dependências e inicie o serviço:
+### 1. Preparação do Ambiente
+Instale as dependências necessárias para o Python e Node.js:
 
 ```bash
+# Dependências do Backend
 pip install fastapi uvicorn pandas requests beautifulsoup4
-python main.py  # Executa o ETL inicial
-python -m uvicorn src.api:app --reload
-npm install chart.js vue-chartjs
 
-2. Frontend (Interface Web)
-Navegue até o diretório da interface e inicie o servidor de desenvolvimento:
-
-Bash
+# Dependências do Frontend (na pasta interface-web)
 cd interface-web
 npm install
-npm run dev
-Acesse a aplicação em: http://localhost:5173

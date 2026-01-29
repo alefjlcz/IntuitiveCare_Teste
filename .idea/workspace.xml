@@ -5,8 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="943d26f1-7a2d-4365-a673-0994eb2b320a" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/Teste_IntuitiveCare_Alessandro.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Teste_IntuitiveCare_Alessandro.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/banco_dados.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/banco_dados.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/coleta.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/coleta.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/processamento.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/processamento.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/transformacao.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/transformacao.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
