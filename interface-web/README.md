@@ -42,6 +42,29 @@ O desenvolvimento foi norteado pelos princípios de arquitetura limpa e simplici
 
 O projeto opera em arquitetura cliente-servidor. É necessário executar os serviços em terminais distintos.
 
+---
+
+## Trade-offs Técnicos e Justificativas
+1. Escolha do Framework Backend: FastAPI
+Decisão: Opção pelo FastAPI em detrimento ao Flask.
+
+Justificativa: O FastAPI oferece performance superior através de suporte nativo a operações assíncronas (ASGI) e validação de dados automática com Pydantic. A geração automática da documentação via Swagger UI facilita testes imediatos sem necessidade de ferramentas externas.
+
+2. Estratégia de Paginação: Offset-based
+Decisão: Implementação de paginação baseada em Offset (page, limit).
+
+Justificativa: Considerando o volume de dados e o requisito de uma interface gerencial, o Offset-based simplifica a navegação direta para páginas específicas no Frontend. Embora o Keyset pagination seja mais performático para tabelas gigantescas, o volume consolidado da ANS é perfeitamente suportado por Offset com índices adequados no SQLite.
+
+3. Gerenciamento de Estado no Frontend: Composition API (Vue 3)
+Decisão: Uso de Refs e Reactives locais em vez de Pinia/Vuex.
+
+Justificativa: Para uma aplicação de dashboard com escopo focado, o uso de estados globais introduziria complexidade desnecessária. A Composition API permite a extração de lógicas reutilizáveis de forma limpa, mantendo o bundle final leve e de fácil manutenção.
+
+4. Cache vs. Queries Diretas: Pré-cálculo no ETL
+Decisão: Os dados estatísticos são pré-processados e agregados durante a fase de ETL.
+
+Justificativa: Em vez de calcular somas complexas em cada requisição à API, o pipeline de dados já consolida os valores por operadora e UF. Isso reduz a carga do banco de dados e garante respostas imediatas para o usuário final no Frontend.
+
 ### 1. Preparação do Ambiente
 Instale as dependências necessárias para o Python e Node.js:
 
@@ -52,3 +75,16 @@ pip install fastapi uvicorn pandas requests beautifulsoup4
 # Dependências do Frontend (na pasta interface-web)
 cd interface-web
 npm install
+```
+## Acessando ambientes.
+
+```bash
+# No terminal raiz, execute o pipeline (Gera o banco intuitive_care.db)
+python main.py
+
+# Inicie a API 
+python -m uvicorn src.api:app --reload
+
+# Em outro terminal (pasta interface-web), inicie o Vue
+npm run dev
+```
