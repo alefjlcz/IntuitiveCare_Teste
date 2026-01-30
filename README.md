@@ -1,36 +1,50 @@
-# Teste Técnico - IntuitiveCare
+# Teste Técnico - Engenharia de Dados (Intuitive Care)
 
-## Visão Geral
+**Autor:** Alessandro Barbosa
+**Stack:** Python 3.10+, Pandas, SQLite, FastAPI, Vue.js (CDN)
 
-Solução de automação completa para coleta, processamento, armazenamento e exposição de dados da ANS. O projeto consiste em um pipeline ETL que normaliza demonstrações financeiras históricas e disponibiliza consultas analíticas via API.
+---
 
-A solução foi desenvolvida focando em **resiliência** (tratamento de erros de layout da fonte) e **facilidade de execução** para o avaliador.
+## 📋 Sobre o Projeto
+Este projeto consiste em um pipeline completo de Engenharia de Dados (End-to-End) desenvolvido para coletar, processar e visualizar dados financeiros de operadoras de planos de saúde, utilizando dados abertos da Agência Nacional de Saúde Suplementar (ANS).
 
-## Tecnologias Utilizadas
+O sistema automatiza desde a coleta dos arquivos (Web Scraping) até a disponibilização dos dados em um Dashboard interativo, passando por rigorosos processos de limpeza e transformação (ETL).
 
-O projeto foi desenvolvido em **Python 3.13** visando performance e recursos modernos, utilizando as bibliotecas:
+### 🚀 Funcionalidades Principais
+1.  **Robô de Coleta (Web Scraping):** Monitora o site da ANS e baixa automaticamente as planilhas mais recentes de "Demonstrações Contábeis" e o "Cadastros de Operadoras".
+2.  **Pipeline ETL:**
+    * Padronização de arquivos CSV (correção de encoding e delimitadores).
+    * Limpeza de dados financeiros (conversão de formatos brasileiros `1.000,00` para float).
+    * Enriquecimento de dados (Join entre despesas e cadastro da operadora).
+3.  **API RESTful:** Servidor de alta performance para consulta de dados paginados e estatísticas.
+4.  **Dashboard Analytics:** Interface gráfica moderna para visualização de KPIs, gráficos e busca detalhada.
 
-* **requests:** Comunicação HTTP e download dos arquivos.
-* **beautifulsoup4:** Web scraping para navegação dinâmica na estrutura de pastas da ANS.
-* **zipfile:** Manipulação e leitura de arquivos compactados.
-* **pandas:** Motor de processamento, limpeza e agregação de dados (ETL).
-* **fastapi / uvicorn:** Criação da API REST e servidor web assíncrono.
-* **sqlite3:** Banco de dados relacional embarcado (garantindo portabilidade sem configuração extra).
+---
 
-## Estrutura do Projeto
+## 🛠️ Tecnologias e Bibliotecas
 
-* `main.py`: Orquestrador principal. Executa o pipeline completo sequencialmente.
-* `src/`: Módulos da aplicação.
-  * `coleta.py`: Crawler que identifica e baixa os arquivos mais recentes.
-  * `processamento.py`: Leitura dos ZIPs, normalização de colunas e unificação.
-  * `transformacao.py`: Limpeza de dados, cálculos estatísticos e regras de negócio.
-  * `banco_dados.py`: Gerenciamento da persistência no SQLite.
-  * `api.py`: Aplicação Web e rotas da API.
-  * `scripts_mysql.sql`: Scripts SQL avançados (Queries analíticas e DDL para MySQL).
-* `downloads_ans/`: Diretório local para cache dos arquivos brutos.
+O projeto foi construído com foco em **performance**, **simplicidade de execução** e **manutenibilidade**.
 
-## Como Executar
+| Componente | Tecnologia | Motivo da Escolha |
+| :--- | :--- | :--- |
+| **Linguagem** | Python 3.10+ | Padrão de mercado para Engenharia de Dados. |
+| **ETL** | Pandas | Processamento eficiente em memória para datasets médios (< 2GB). |
+| **API** | FastAPI | Performance assíncrona (ASGI) superior ao Flask e documentação automática. |
+| **Banco** | SQLite | Portabilidade total (arquivo único) para facilitar a avaliação do teste. |
+| **Frontend** | Vue.js (CDN) | Framework reativo leve. O uso via CDN elimina a necessidade de `npm install` e builds complexos. |
+| **Scraping** | BeautifulSoup4 | Parsing robusto de HTML para localizar links de arquivos dinâmicos. |
 
-1. **Instale as dependências:**
-   ```bash
-   pip install requests pandas beautifulsoup4 fastapi uvicorn
+---
+
+## ⚙️ Como Executar o Projeto
+
+Siga os passos abaixo para rodar a aplicação completa em sua máquina.
+
+### Pré-requisitos
+* Python 3.10 ou superior instalado.
+* Navegador Web moderno (Chrome, Edge, Firefox).
+
+### Passo 1: Instalação das Dependências
+Abra o terminal na pasta raiz do projeto e execute:
+```bash
+pip install -r requirements.txt
