@@ -1,119 +1,148 @@
--- =============================================================================
--- TESTE 3: BANCO DE DADOS E ANÁLISE SQL (Completo)
--- =============================================================================
+-- ARQUIVO: queries_mysql.sql
+-- AUTOR: Alessandro Barbosa
+-- PROJETO: Teste Técnico Intuitive Care - Engenharia de Dados
 
-/* =============================================================================
-   3.2 e 3.3 - JUSTIFICATIVAS TÉCNICAS E ANÁLISE CRÍTICA (Respondendo ao PDF)
-   =============================================================================
+-- ==============================================================================
+-- 1. CONFIGURAÇÃO INICIAL (DDL) - REQUISITO 3.2
+-- ==============================================================================
 
-   [A] TRADE-OFF: NORMALIZAÇÃO (Opção B Escolhida)
-       Optei por separar os dados em duas tabelas: 'operadoras_cadastral' e 'despesas_trimestrais'.
-       - Motivo 1 (Manutenibilidade): Dados cadastrais (Razão Social, UF) mudam pouco. Se a operadora mudar de nome, atualizo em apenas 1 lugar.
-       - Motivo 2 (Performance): A tabela de despesas fica mais leve (menos colunas de texto repetido), acelerando as queries de soma.
+CREATE DATABASE IF NOT EXISTS intuitive_care_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE intuitive_care_db;
 
-   [B] TRADE-OFF: TIPOS DE DADOS
-       - Monetário: Usei DECIMAL(15, 2).
-         Justificativa: Tipos FLOAT/DOUBLE introduzem erros de arredondamento em ponto flutuante.
-         Para dados contábeis da ANS, a precisão exata dos centavos é obrigatória.
-       - Datas: Usei DATE.
-         Justificativa: Não é necessário armazenar hora/minuto (TIMESTAMP) para dados de balanço trimestral.
+-- 1.1 Tabela Dimensão: Operadoras (Vem do CSV do Cadop 2.2)
+CREATE TABLE IF NOT EXISTS dim_operadoras (
+    registro_ans INT NOT NULL PRIMARY KEY,
+    cnpj VARCHAR(14) NOT NULL,
+    razao_social VARCHAR(255) NOT NULL,
+    modalidade VARCHAR(100),
+    uf CHAR(2),
 
-   [C] ANÁLISE CRÍTICA DA IMPORTAÇÃO (Tratamento de Inconsistências)
-       Conforme solicitado no item 3.3, identifiquei os seguintes problemas nos CSVs brutos:
-       1. Strings em campos numéricos (ex: "1.234,56").
-       2. Valores NULL/Vazios em chaves primárias.
-       3. Codificação de texto (Latin1 vs UTF-8).
+    -- Índice no CNPJ para buscas rápidas e joins futuros
+    INDEX idx_cnpj (cnpj)
+) ENGINE=InnoDB;
 
-       SOLUÇÃO ADOTADA: Pipeline de ETL em Python.
-       Em vez de importar "lixo" para o banco e tentar limpar com SQL, utilizei o Pandas (Python) para:
-       - Converter vírgulas para pontos.
-       - Remover operadoras sem identificação.
-       - Gerar um CSV limpo e padronizado ('despesas_agregadas.csv') pronto para carga.
+-- 1.2 Tabela Fato: Despesas Consolidadas (Vem do CSV 1.3/2.2)
+CREATE TABLE IF NOT EXISTS fato_despesas_consolidadas (
+    id_despesa BIGINT AUTO_INCREMENT PRIMARY KEY,
+    registro_ans INT NOT NULL,  -- Chave de ligação (Foreign Key)
+    ano INT NOT NULL,
+    trimestre CHAR(2) NOT NULL, -- Ex: '1T'
+    data_referencia DATE NOT NULL, -- Coluna calculada para ordenação (Ex: 2025-01-01)
+    valor_despesas DECIMAL(15, 2) NOT NULL, -- DECIMAL para precisão financeira
+
+    -- Integridade Referencial (Garante que a operadora existe)
+    CONSTRAINT fk_operadora_fato
+        FOREIGN KEY (registro_ans) REFERENCES dim_operadoras(registro_ans)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+
+    -- Índice composto para performance em filtros de período
+    INDEX idx_tempo (ano, trimestre)
+) ENGINE=InnoDB;
+
+-- 1.3 Tabela Agregada: Performance (Vem do CSV 2.3)
+CREATE TABLE IF NOT EXISTS analise_agregada_uf (
+    id_agregado INT AUTO_INCREMENT PRIMARY KEY,
+    razao_social VARCHAR(255),
+    uf CHAR(2),
+    total_despesas DECIMAL(18, 2),
+    media_trimestral DECIMAL(18, 2),
+    desvio_padrao DECIMAL(18, 2),
+
+    INDEX idx_uf_ranking (uf, total_despesas DESC)
+) ENGINE=InnoDB;
+
+-- ==============================================================================
+-- 2. QUERIES DE IMPORTAÇÃO (LOAD DATA) - REQUISITO 3.3
+-- ==============================================================================
+-- OBS: Os caminhos dos arquivos devem ser ajustados conforme o ambiente do avaliador.
+
+/*
+-- 2.1 Carga das Operadoras
+LOAD DATA INFILE '/path/to/Relatorio_Cadop.csv'
+INTO TABLE dim_operadoras
+CHARACTER SET utf8mb4
+FIELDS TERMINATED BY ';' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(registro_ans, cnpj, razao_social, modalidade, @dummy, @dummy, uf, @dummy...);
+
+-- 2.2 Carga das Despesas Consolidadas
+LOAD DATA INFILE '/path/to/consolidado_despesas.csv'
+INTO TABLE fato_despesas_consolidadas
+CHARACTER SET utf8mb4
+FIELDS TERMINATED BY ';'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@cnpj, @razao, trimestre, ano, valor_despesas)
+SET
+    registro_ans = (SELECT registro_ans FROM dim_operadoras WHERE cnpj = REPLACE(@cnpj, '.', '') LIMIT 1),
+    data_referencia = STR_TO_DATE(CONCAT(ano, '-', SUBSTRING(trimestre, 1, 1) * 3 - 2, '-01'), '%Y-%m-%d');
+
+-- 2.3 Carga dos Dados Agregados
+LOAD DATA INFILE '/path/to/despesas_agregadas.csv'
+INTO TABLE analise_agregada_uf
+CHARACTER SET utf8mb4
+FIELDS TERMINATED BY ';'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(razao_social, uf, total_despesas, media_trimestral, desvio_padrao);
 */
 
--- =============================================================================
--- DDL - ESTRUTURAÇÃO DAS TABELAS
--- =============================================================================
+-- ==============================================================================
+-- 3. QUERIES ANALÍTICAS AVANÇADAS - REQUISITO 3.4
+-- ==============================================================================
 
-CREATE TABLE IF NOT EXISTS operadoras_cadastral (
-    registro_ans INT PRIMARY KEY COMMENT 'Código único da operadora (PK)',
-    razao_social VARCHAR(255),
-    cnpj VARCHAR(20),
-    uf CHAR(2)
-);
-
-CREATE TABLE IF NOT EXISTS despesas_trimestrais (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    registro_ans INT,
-    trimestre VARCHAR(10) COMMENT 'Ex: 1T2023',
-    data_referencia DATE,
-    valor_despesa DECIMAL(15, 2) COMMENT 'Precisão monetária garantida',
-    FOREIGN KEY (registro_ans) REFERENCES operadoras_cadastral(registro_ans)
-);
-
-CREATE INDEX idx_analise_temporal ON despesas_trimestrais(data_referencia);
-CREATE INDEX idx_analise_geo ON operadoras_cadastral(uf);
-
--- =============================================================================
--- 3.4 QUERIES ANALÍTICAS
--- =============================================================================
-
--- QUERY 1: Top 5 operadoras com maior crescimento (%) entre 1º e Último Trimestre
--- Desafio: Operadoras podem não ter dados em todos os trimestres.
--- Solução: Utilizei INNER JOIN para considerar apenas operadoras que existem em AMBOS os períodos,
--- garantindo que o cálculo de crescimento seja matemático e justo.
-WITH despesas_inicio AS (
-    SELECT registro_ans, SUM(valor_despesa) as total_ini
-    FROM despesas_trimestrais
-    WHERE trimestre = '1T2023'
-    GROUP BY registro_ans
-),
-despesas_fim AS (
-    SELECT registro_ans, SUM(valor_despesa) as total_fim
-    FROM despesas_trimestrais
-    WHERE trimestre = '3T2023'
-    GROUP BY registro_ans
-)
+-- ------------------------------------------------------------------------------
+-- QUERY 1: Top 5 Operadoras com maior crescimento percentual (1T2025 vs 3T2025)
+-- ------------------------------------------------------------------------------
 SELECT
-    c.razao_social,
-    CONCAT(ROUND(((f.total_fim - i.total_ini) / i.total_ini) * 100, 2), '%') as crescimento_pct
-FROM despesas_inicio i
-JOIN despesas_fim f ON i.registro_ans = f.registro_ans
-JOIN operadoras_cadastral c ON i.registro_ans = c.registro_ans
-ORDER BY ((f.total_fim - i.total_ini) / i.total_ini) DESC
+    o.razao_social,
+    t1.valor_despesas AS despesas_1t,
+    t3.valor_despesas AS despesas_3t,
+    CAST(((t3.valor_despesas - t1.valor_despesas) / t1.valor_despesas * 100) AS DECIMAL(10,2)) AS crescimento_pct
+FROM dim_operadoras o
+JOIN fato_despesas_consolidadas t1
+    ON o.registro_ans = t1.registro_ans AND t1.ano = 2025 AND t1.trimestre = '1T'
+JOIN fato_despesas_consolidadas t3
+    ON o.registro_ans = t3.registro_ans AND t3.ano = 2025 AND t3.trimestre = '3T'
+WHERE t1.valor_despesas > 0
+ORDER BY crescimento_pct DESC
 LIMIT 5;
 
--- QUERY 2: Top 5 Estados com maiores despesas e Média por Operadora
--- Desafio: Calcular agregado (Soma) e média granular na mesma query.
+-- ------------------------------------------------------------------------------
+-- QUERY 2: Distribuição por UF (Top 5 Estados e Média por Operadora)
+-- ------------------------------------------------------------------------------
 SELECT
-    c.uf,
-    SUM(d.valor_despesa) as total_despesas_estado,
-    AVG(d.valor_despesa) as media_por_lancamento
-FROM despesas_trimestrais d
-JOIN operadoras_cadastral c ON d.registro_ans = c.registro_ans
-GROUP BY c.uf
+    o.uf,
+    SUM(f.valor_despesas) AS total_despesas_estado,
+    COUNT(DISTINCT o.registro_ans) AS qtd_operadoras,
+    CAST(SUM(f.valor_despesas) / COUNT(DISTINCT o.registro_ans) AS DECIMAL(15,2)) AS media_por_operadora
+FROM fato_despesas_consolidadas f
+JOIN dim_operadoras o ON f.registro_ans = o.registro_ans
+GROUP BY o.uf
 ORDER BY total_despesas_estado DESC
 LIMIT 5;
 
--- QUERY 3: Operadoras acima da média em 2+ trimestres
--- Trade-off: Utilizei CTEs (Common Table Expressions) para legibilidade, dividindo o problema
--- em "Calcular Média do Mercado" -> "Comparar Operadora" -> "Contar Ocorrências".
-WITH media_mercado AS (
-    SELECT trimestre, AVG(valor_despesa) as media_geral
-    FROM despesas_trimestrais
-    GROUP BY trimestre
+-- ------------------------------------------------------------------------------
+-- QUERY 3: Operadoras acima da média em pelo menos 2 trimestres (CTE)
+-- ------------------------------------------------------------------------------
+WITH MediaPorTrimestre AS (
+    SELECT ano, trimestre, AVG(valor_despesas) as media_geral_mercado
+    FROM fato_despesas_consolidadas
+    GROUP BY ano, trimestre
 ),
-performance AS (
+Comparativo AS (
     SELECT
-        d.registro_ans,
-        CASE WHEN d.valor_despesa > m.media_geral THEN 1 ELSE 0 END as superou_media
-    FROM despesas_trimestrais d
-    JOIN media_mercado m ON d.trimestre = m.trimestre
+        f.registro_ans,
+        CASE WHEN f.valor_despesas > m.media_geral_mercado THEN 1 ELSE 0 END AS acima_da_media
+    FROM fato_despesas_consolidadas f
+    JOIN MediaPorTrimestre m ON f.ano = m.ano AND f.trimestre = m.trimestre
 )
 SELECT
-    c.razao_social,
-    SUM(p.superou_media) as trimestres_acima_da_media
-FROM performance p
-JOIN operadoras_cadastral c ON p.registro_ans = c.registro_ans
-GROUP BY c.razao_social
-HAVING trimestres_acima_da_media >= 2;
+    o.razao_social,
+    SUM(c.acima_da_media) AS qtd_trimestres_acima
+FROM Comparativo c
+JOIN dim_operadoras o ON c.registro_ans = o.registro_ans
+GROUP BY o.registro_ans, o.razao_social
+HAVING SUM(c.acima_da_media) >= 2
+ORDER BY qtd_trimestres_acima DESC, o.razao_social ASC;

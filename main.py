@@ -1,51 +1,56 @@
 import sqlite3
-import pandas as pd
 import os
-from src.processamento import processar_arquivos_zip
+import sys
+# Importa a função renomeada
+from src.processamento import executar_etl_financeiro
 
-# Configuração do caminho do banco (na raiz do projeto)
+# Configuração do Ambiente
 DIRETORIO_RAIZ = os.path.dirname(os.path.abspath(__file__))
-ARQUIVO_DB = os.path.join(DIRETORIO_RAIZ, "intuitive_care.db")
+DB_PATH = os.path.join(DIRETORIO_RAIZ, "intuitive_care.db")
 
 
-def salvar_no_banco(dados):
+def persistir_dados_sqlite(dataset):
     """
-    Recebe o dicionário com 'resumo' e 'historico' e grava no SQLite.
+    Persiste os DataFrames processados no banco de dados SQLite.
     """
-    if dados is None:
-        print("❌ Falha no processamento. Nada a salvar.")
+    if not dataset:
+        print("[ERRO] O dataset está vazio. Verifique o log de processamento.")
         return
 
-    print(f"💾 Salvando dados no banco: {ARQUIVO_DB}...")
+    print(f"\n--- ATUALIZANDO BANCO DE DADOS ({DB_PATH}) ---")
 
     try:
-        conn = sqlite3.connect(ARQUIVO_DB)
+        conn = sqlite3.connect(DB_PATH)
 
-        # 1. Salva a tabela principal (Dashboard/Lista)
-        # O 'replace' garante que a tabela seja recriada com as colunas corretas (CNPJ, UF, etc)
-        dados['resumo'].to_sql('operadoras_despesas', conn, if_exists='replace', index=False)
-        print(f"   ✅ Tabela 'operadoras_despesas' atualizada ({len(dados['resumo'])} registros).")
+        # Persistência da tabela consolidada
+        dataset['resumo'].to_sql('operadoras_despesas', conn, if_exists='replace', index=False)
+        print(f"[DB] Tabela 'operadoras_despesas' atualizada.")
 
-        # 2. Salva a tabela de histórico detalhado (Requisito 4.3)
-        dados['historico'].to_sql('historico_despesas', conn, if_exists='replace', index=False)
-        print(f"   ✅ Tabela 'historico_despesas' atualizada ({len(dados['historico'])} registros).")
-
-        conn.close()
-        print("\n✨ Tudo pronto! O banco de dados está sincronizado.")
+        # Persistência da tabela de histórico
+        dataset['historico'].to_sql('historico_despesas', conn, if_exists='replace', index=False)
+        print(f"[DB] Tabela 'historico_despesas' atualizada.")
 
     except Exception as e:
-        print(f"❌ Erro ao salvar no banco: {e}")
+        print(f"[ERRO] Falha na persistência SQL: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+        print("\n=== PIPELINE FINALIZADO COM SUCESSO ===")
 
 
 def main():
-    print("=== INICIANDO PIPELINE DE DADOS (ETL) ===\n")
+    print("=== INICIANDO ORQUESTRADOR DE DADOS ===")
 
-    # 1. Executa o processamento que unifica Cadop e Financeiro
-    # Agora lidando com a coluna REGISTRO_OPERADORA identificada no seu log
-    resultado = processar_arquivos_zip()
+    # Execução do ETL (Extract, Transform, Load)
+    try:
+        resultado_etl = executar_etl_financeiro()
 
-    # 2. Persiste os dados no banco SQLite
-    salvar_no_banco(resultado)
+        # Persistência
+        persistir_dados_sqlite(resultado_etl)
+
+    except Exception as e:
+        print(f"[CRITICAL ERROR] O pipeline foi interrompido: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

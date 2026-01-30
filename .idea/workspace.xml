@@ -5,14 +5,35 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="943d26f1-7a2d-4365-a673-0994eb2b320a" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/interface-web/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/interface-web/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Vue.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/consolidado_despesas.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/despesas_agregadas.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/.~lock.Relatorio_Cadop.csv#" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/1T2025.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/2T2025.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/3T2025.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/Relatorio_Cadop.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/.vscode/extensions.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/README.md" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/interface-web/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/interface-web/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/interface-web/src/App.vue" beforeDir="false" afterPath="$PROJECT_DIR$/interface-web/src/App.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/jsconfig.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/package-lock.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/package.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/public/favicon.ico" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/src/App.vue" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/src/main.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/interface-web/vite.config.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/intuitive_care.db" beforeDir="false" afterPath="$PROJECT_DIR$/intuitive_care.db" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts_mysql.sql" beforeDir="false" afterPath="$PROJECT_DIR$/scripts_mysql.sql" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/banco_dados.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/coleta.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/coleta.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/processamento.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/processamento.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/transformacao.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -22,6 +43,7 @@
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
       <list>
+        <option value="HTML File" />
         <option value="Python Script" />
       </list>
     </option>
@@ -29,9 +51,9 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 0
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 0
+}</component>
   <component name="ProjectId" id="38tWFkPDRKqypOSssdHrSleS4Xu" />
   <component name="ProjectLevelVcsManager">
     <ConfirmationsSetting value="2" id="Add" />
@@ -42,6 +64,7 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "DefaultHtmlFileTemplate": "HTML File",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "Python.main.executor": "Run",
     "Python.processamento.executor": "Run",

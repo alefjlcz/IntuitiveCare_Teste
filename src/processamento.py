@@ -1,117 +1,233 @@
 import pandas as pd
 import os
 import glob
+import zipfile
+import re
+
+# --- CONSTANTES E CONFIGURAÇÕES ---
+DIRETORIO_SRC = os.path.dirname(os.path.abspath(__file__))
+DIRETORIO_RAIZ = os.path.dirname(DIRETORIO_SRC)
+
+PATH_ENTRADA_BRUTA = os.path.join(DIRETORIO_RAIZ, "downloads_ans", "arquivos_extraidos")
+PATH_ENTRADA_CADOP = os.path.join(DIRETORIO_RAIZ, "downloads_ans", "arquivos_baixados")
+PATH_SAIDA_PROCESSADA = os.path.join(DIRETORIO_RAIZ, "planilhas_processadas")
 
 
-def ler_csv_blindado(arquivo, separador=';', pular_linhas=0):
-    """Lê CSV tentando UTF-8 e depois CP1252 para evitar erros de acento."""
-    try:
-        if isinstance(arquivo, str):
-            return pd.read_csv(arquivo, sep=separador, encoding='utf-8', dtype=str, skiprows=pular_linhas)
-        arquivo.seek(0)
-        return pd.read_csv(arquivo, sep=separador, encoding='utf-8', dtype=str, skiprows=pular_linhas)
-    except:
-        if isinstance(arquivo, str):
-            return pd.read_csv(arquivo, sep=separador, encoding='cp1252', dtype=str, skiprows=pular_linhas)
-        arquivo.seek(0)
-        return pd.read_csv(arquivo, sep=separador, encoding='cp1252', dtype=str, skiprows=pular_linhas)
+def inicializar_diretorios():
+    """Garante a existência dos diretórios de saída."""
+    if not os.path.exists(PATH_SAIDA_PROCESSADA):
+        os.makedirs(PATH_SAIDA_PROCESSADA)
 
 
-def processar_arquivos_zip():
-    print("--- 1. INICIANDO O PROCESSO DE UNIFICAÇÃO E HISTÓRICO ---")
+def gerenciar_conflito_arquivo(diretorio, nome_base, extensao=".zip"):
+    """Gerencia versionamento de arquivos."""
+    caminho_completo = os.path.join(diretorio, nome_base + extensao)
 
-    DIRETORIO_SRC = os.path.dirname(os.path.abspath(__file__))
-    DIRETORIO_RAIZ = os.path.dirname(DIRETORIO_SRC)
-    PASTA_DOWNLOADS = os.path.join(DIRETORIO_RAIZ, "downloads_ans")
+    if not os.path.exists(caminho_completo):
+        return caminho_completo
 
-    # --- ETAPA A: PREPARAR O CADASTRO (CADOP) ---
-    caminho_cadop = os.path.join(PASTA_DOWNLOADS, "Relatorio_Cadop.csv")
-    df_cadastro = pd.DataFrame()
+    print(f"\n[AVISO] O arquivo '{nome_base}{extensao}' já existe.")
+    while True:
+        resp = input("   Deseja substituir? (S/N): ").strip().upper()
+        if resp in ['S', 'N']: break
 
-    if os.path.exists(caminho_cadop):
-        print(f"📂 Lendo Cadop em: {caminho_cadop}")
-        # Lê o cadastro (Relatorio_Cadop)
-        df_cadastro = ler_csv_blindado(caminho_cadop)
-        df_cadastro.columns = [str(c).strip().upper() for c in df_cadastro.columns]
-
-        # Identifica as colunas conforme o seu log
-        col_id = next((c for c in ['REGISTRO_OPERADORA', 'REGISTRO_ANS', 'CD_OPERADORA'] if c in df_cadastro.columns),
-                      None)
-        col_cnpj = next((c for c in ['CNPJ'] if c in df_cadastro.columns), None)
-        col_uf = next((c for c in ['UF', 'SG_UF'] if c in df_cadastro.columns), None)
-        col_nome = next((c for c in ['RAZAO_SOCIAL', 'RAZAOSOCIAL', 'NM_RAZAO_SOCIAL'] if c in df_cadastro.columns),
-                        None)
-
-        if col_id and col_cnpj:
-            df_cadastro = df_cadastro[[col_id, col_cnpj, col_uf, col_nome]].copy()
-            df_cadastro.rename(
-                columns={col_id: 'Registro_ANS', col_cnpj: 'CNPJ', col_uf: 'UF', col_nome: 'Razao_Social'},
-                inplace=True)
-            df_cadastro['Registro_ANS'] = df_cadastro['Registro_ANS'].astype(str).str.replace(r'\.0$', '', regex=True)
-            print(f"✅ Cadastro carregado: {len(df_cadastro)} registros.")
-        else:
-            print(f"⚠️ ERRO no Cadop. Colunas: {list(df_cadastro.columns)}")
-
-    # --- ETAPA B: PREPARAR O HISTÓRICO (CONSOLIDADO_DESPESAS.CSV) ---
-    caminho_consolidado = os.path.join(DIRETORIO_RAIZ, "consolidado_despesas.csv")
-
-    if not os.path.exists(caminho_consolidado):
-        print(f"❌ Arquivo de histórico não encontrado na raiz: {caminho_consolidado}")
-        return None
-
-    print(f"   -> Processando Histórico: consolidado_despesas.csv")
-    df_hist = ler_csv_blindado(caminho_consolidado)
-    df_hist.columns = [str(c).strip().upper() for c in df_hist.columns]
-
-    # MAPEAMENTO BASEADO NO SEU LOG: ['CNPJ', 'RAZAOSOCIAL', 'TRIMESTRE', 'ANO', 'VALORDESPESAS']
-    col_id_h = next((c for c in ['CNPJ', 'REG_ANS', 'REGISTRO_OPERADORA'] if c in df_hist.columns), None)
-    col_trimestre = next((c for c in ['TRIMESTRE'] if c in df_hist.columns), None)
-    col_ano = next((c for c in ['ANO'] if c in df_hist.columns), None)
-    col_valor = next((c for c in ['VALORDESPESAS', 'VL_SALDO_FINAL', 'VALOR'] if c in df_hist.columns), None)
-
-    if not col_id_h or not col_valor:
-        print(f"❌ Colunas essenciais não encontradas. Disponíveis: {list(df_hist.columns)}")
-        return None
-
-    # Limpeza e Padronização do Histórico
-    df_hist_clean = pd.DataFrame()
-    df_hist_clean['CNPJ'] = df_hist[col_id_h].astype(str).str.replace(r'\.0$', '', regex=True)
-
-    # Cria a coluna de Data combinando Trimestre e Ano
-    if col_trimestre and col_ano:
-        df_hist_clean['Data'] = df_hist[col_trimestre] + "/" + df_hist[col_ano]
+    if resp == 'S':
+        return caminho_completo
     else:
-        df_hist_clean['Data'] = "Período Único"
+        contador = 1
+        while True:
+            novo_nome = f"{nome_base}_{contador:02d}{extensao}"
+            if not os.path.exists(os.path.join(diretorio, novo_nome)):
+                print(f"   [INFO] Gerando versão: {novo_nome}")
+                return os.path.join(diretorio, novo_nome)
+            contador += 1
 
-    # Converte valor
-    df_hist_clean['Valor'] = df_hist[col_valor].astype(str).str.replace('.', '', regex=False).str.replace(',', '.',
-                                                                                                          regex=False)
-    df_hist_clean['Valor'] = pd.to_numeric(df_hist_clean['Valor'], errors='coerce').fillna(0)
 
-    # --- ETAPA C: CRUZAMENTO (MERGE) ---
-    print("🔄 Cruzando Financeiro com Cadastro...")
+def validar_digitos_cnpj(cnpj):
+    """Validação aritmética do CNPJ."""
+    cnpj = re.sub(r'\D', '', str(cnpj))
+    if len(cnpj) != 14 or len(set(cnpj)) == 1: return False
+    for i in range(12, 14):
+        peso = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        if i == 12: peso = peso[1:]
+        soma = sum(int(a) * b for a, b in zip(cnpj[:i], peso))
+        resto = soma % 11
+        digito = 0 if resto < 2 else 11 - resto
+        if int(cnpj[i]) != digito: return False
+    return True
+
+
+def converter_valor_monetario(valor):
+    if pd.isna(valor): return 0.0
+    try:
+        return float(str(valor).replace('.', '').replace(',', '.'))
+    except:
+        return 0.0
+
+
+def sanitizar_id_ans(valor):
+    return re.sub(r'\D', '', str(valor).split('.')[0]).strip()
+
+
+def ler_arquivo_csv(caminho_arquivo):
+    configs = [
+        {'sep': ';', 'encoding': 'utf-8'},
+        {'sep': ';', 'encoding': 'latin1'},
+        {'sep': ',', 'encoding': 'utf-8'}
+    ]
+    for cfg in configs:
+        try:
+            df = pd.read_csv(caminho_arquivo, sep=cfg['sep'], encoding=cfg['encoding'], dtype=str)
+            if len(df.columns) > 1: return df
+        except:
+            continue
+    return pd.DataFrame()
+
+
+def carregar_dados_cadastrais():
+    print("[ETAPA] Carregando CADOP...", end=" ")
+    arquivo = os.path.join(PATH_ENTRADA_CADOP, "Relatorio_Cadop.csv")
+    if not os.path.exists(arquivo): return pd.DataFrame()
+
+    df = ler_arquivo_csv(arquivo)
+    if df.empty: return pd.DataFrame()
+
+    df.columns = [c.strip().upper() for c in df.columns]
+
+    col_reg = next((c for c in df.columns if c in ['REGISTRO_OPERADORA', 'REGISTRO_ANS', 'CD_OPERADORA']), None)
+    col_cnpj = next((c for c in df.columns if 'CNPJ' in c), None)
+    col_razao = next((c for c in df.columns if 'RAZAO' in c), None)
+    col_modalidade = next((c for c in df.columns if 'MODALIDADE' in c), None)
+    col_uf = next((c for c in df.columns if c in ['UF', 'SG_UF']), None)
+
+    if col_reg and col_cnpj and col_razao:
+        df['PK_Registro_ANS'] = df[col_reg].apply(sanitizar_id_ans)
+        df_final = df[[
+            'PK_Registro_ANS', col_cnpj, col_razao,
+            col_modalidade if col_modalidade else col_reg,
+            col_uf if col_uf else col_reg
+        ]].copy()
+        df_final.columns = ['PK_Registro_ANS', 'CNPJ', 'RazaoSocial', 'Modalidade', 'UF']
+        df_final = df_final.drop_duplicates(subset=['PK_Registro_ANS'])
+        print(f"Sucesso ({len(df_final)} registros).")
+        return df_final
+    return pd.DataFrame()
+
+
+def gerar_relatorio_agregado_2_3(df_detalhado):
+    """
+    Implementa o Requisito 2.3: Agregação, Estatística e Ordenação.
+    """
+    print("\n[ETAPA 2.3] Gerando Relatório Agregado (Estatísticas)...")
+
+    if df_detalhado.empty:
+        print("[AVISO] Dataset vazio, pulando agregação.")
+        return
+
+    # Agrupamento e cálculo de métricas
+    # Agrupa por Operadora e UF, calculando métricas sobre o ValorDespesas
+    df_agg = df_detalhado.groupby(['RazaoSocial', 'UF'])['ValorDespesas'].agg(
+        Total_Despesas='sum',
+        Media_Trimestral='mean',
+        Desvio_Padrao='std'  # Desvio padrão das despesas entre os trimestres
+    ).reset_index()
+
+    # Preenche desvio padrão nulo (caso só tenha 1 trimestre) com 0.0
+    df_agg['Desvio_Padrao'] = df_agg['Desvio_Padrao'].fillna(0.0)
+
+    # Ordenação: Maior valor para menor (Requisito de ordenação)
+    df_agg = df_agg.sort_values(by='Total_Despesas', ascending=False)
+
+    print(
+        f"   [INFO] Agregação concluída. Top 1: {df_agg.iloc[0]['RazaoSocial']} (R$ {df_agg.iloc[0]['Total_Despesas']:,.2f})")
+
+    # Exportação
+    caminho_zip = gerenciar_conflito_arquivo(PATH_SAIDA_PROCESSADA, "Teste_Alessandro_Barbosa", ".zip")
+
+    print(f"[EXPORT] Salvando Agregado em: {caminho_zip}")
+    df_agg.to_csv(
+        caminho_zip,
+        index=False,
+        sep=';',
+        encoding='utf-8-sig',
+        decimal=',',  # Formato brasileiro para visualização fácil
+        compression=dict(method='zip', archive_name='despesas_agregadas.csv')
+    )
+
+
+def executar_etl_financeiro():
+    inicializar_diretorios()
+    df_cadastro = carregar_dados_cadastrais()
+
+    print("\n--- INICIANDO PROCESSAMENTO FINANCEIRO ---")
+    arquivos = glob.glob(os.path.join(PATH_ENTRADA_BRUTA, "**", "*.csv"), recursive=True) + \
+               glob.glob(os.path.join(PATH_ENTRADA_BRUTA, "**", "*.CSV"), recursive=True)
+
+    lista_dfs = []
+
+    for arquivo in arquivos:
+        nome_pasta = os.path.basename(os.path.dirname(arquivo))
+        if 'T' not in nome_pasta.upper(): continue
+
+        df = ler_arquivo_csv(arquivo)
+        if df.empty: continue
+        df.columns = [c.strip().upper() for c in df.columns]
+
+        col_reg = next((c for c in df.columns if c in ['REG_ANS', 'CD_OPERADORA', 'REGISTRO_OPERADORA']), None)
+        col_conta = next((c for c in df.columns if c in ['CD_CONTA', 'CD_CONTA_CONTABIL', 'CONTA']), None)
+        col_valor = next((c for c in df.columns if c in ['VL_SALDO_FINAL', 'VALOR', 'SALDO']), None)
+
+        if col_reg and col_conta and col_valor:
+            df_filtrado = df[df[col_conta].str.startswith('4', na=False)].copy()
+            if df_filtrado.empty: continue
+
+            temp = pd.DataFrame()
+            temp['PK_Registro_ANS'] = df_filtrado[col_reg].apply(sanitizar_id_ans)
+            try:
+                temp['Trimestre'] = nome_pasta.split('T')[0] + 'T'
+                temp['Ano'] = nome_pasta.split('T')[1]
+            except:
+                temp['Trimestre'] = 'ND'; temp['Ano'] = 'ND'
+            temp['ValorDespesas'] = df_filtrado[col_valor].apply(converter_valor_monetario)
+
+            temp_agrupado = temp.groupby(['PK_Registro_ANS', 'Trimestre', 'Ano'])['ValorDespesas'].sum().reset_index()
+            lista_dfs.append(temp_agrupado)
+            print(f"   [OK] {os.path.basename(arquivo)}")
+
+    if not lista_dfs: return None
+
+    df_consolidado = pd.concat(lista_dfs, ignore_index=True)
 
     if not df_cadastro.empty:
-        # Tabela de histórico (já tem CNPJ, então batemos por ele)
-        df_historico_final = df_hist_clean.copy()
-
-        # Resumo para a tabela principal (soma total por CNPJ)
-        df_resumo_fin = df_hist_clean.groupby('CNPJ')['Valor'].sum().reset_index()
-        df_resumo_fin.rename(columns={'Valor': 'Total_Despesas'}, inplace=True)
-
-        # Junta com o cadastro para ter Razao_Social, UF e Registro_ANS
-        df_resumo_final = pd.merge(df_resumo_fin, df_cadastro, on='CNPJ', how='left')
+        df_final = pd.merge(df_consolidado, df_cadastro, on='PK_Registro_ANS', how='left')
+        df_final['RazaoSocial'] = df_final['RazaoSocial'].fillna('DESCONHECIDA')
+        df_final['Modalidade'] = df_final['Modalidade'].fillna('ND')
+        df_final['UF'] = df_final['UF'].fillna('BR')
     else:
-        # Fallback caso não tenha cadastro
-        df_resumo_final = df_hist_clean.groupby('CNPJ')['Valor'].sum().reset_index()
-        df_resumo_final.rename(columns={'Valor': 'Total_Despesas'}, inplace=True)
-        df_resumo_final['Razao_Social'] = 'Operadora ' + df_resumo_final['CNPJ']
-        df_resumo_final['UF'] = 'Indefinido'
-        df_historico_final = df_hist_clean
+        df_final = df_consolidado
+        for c in ['CNPJ', 'RazaoSocial', 'Modalidade', 'UF']: df_final[c] = 'N/A'
 
-    print(f"🏁 Processamento concluído! Total: {len(df_resumo_final)} operadoras.")
+    # Validação (2.1)
+    df_final['CNPJ_Limpo'] = df_final['CNPJ'].astype(str).str.replace(r'\D', '', regex=True)
+    df_validos = df_final[df_final['CNPJ_Limpo'].apply(validar_digitos_cnpj)].copy()
 
-    return {
-        "resumo": df_resumo_final,
-        "historico": df_historico_final
-    }
+    print(f"[INFO] Registros Validados: {len(df_validos)}")
+
+    # --- EXECUTA ETAPA 2.3 (AGREGAÇÃO) ---
+    gerar_relatorio_agregado_2_3(df_validos)
+
+    # Gera o arquivo consolidado detalhado (Etapa 1.3)
+    caminho_cons = gerenciar_conflito_arquivo(PATH_SAIDA_PROCESSADA, "consolidado_despesas", ".zip")
+    df_validos[['CNPJ', 'RazaoSocial', 'Trimestre', 'Ano', 'ValorDespesas']].to_csv(
+        caminho_cons, index=False, sep=';', encoding='utf-8-sig',
+        compression=dict(method='zip', archive_name='consolidado_despesas.csv')
+    )
+    print(f"[EXPORT] Consolidado Detalhado: {caminho_cons}")
+
+    # Retorno para Banco
+    df_banco = df_validos.rename(
+        columns={'ValorDespesas': 'Total_Despesas', 'RazaoSocial': 'Razao_Social', 'PK_Registro_ANS': 'Registro_ANS'})
+    if not df_banco.empty: df_banco['Data'] = df_banco['Trimestre'] + '/' + df_banco['Ano']
+
+    # Garante que a tabela no banco terá o nome que a API espera
+    return {"operadoras_despesas": df_banco, "historico_despesas": df_banco}

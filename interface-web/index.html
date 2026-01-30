@@ -1,13 +1,432 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IntuitiveCare - Dashboard ANS</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intuitive Care - Dashboard ANS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card-stats { border: none; border-radius: 12px; transition: transform 0.2s; }
+        .card-stats:hover { transform: translateY(-5px); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .chart-container { position: relative; height: 350px; }
+        .table-row-hover:hover { background-color: #f8f9fa; }
+
+        /* TABELA FIXA E TRUNCAMENTO */
+        .table-fixed { table-layout: fixed; width: 100%; }
+        .truncate-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+        }
+        .cursor-pointer { cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container py-5">
+
+    <div class="d-flex justify-content-between align-items-center mb-5">
+        <div>
+            <h2 class="fw-bold text-primary mb-0"><i class="bi bi-pie-chart-fill"></i> Monitoramento ANS</h2>
+            <p class="text-muted mb-0">Dashboard Financeiro de Operadoras de Saúde</p>
+        </div>
+        <button class="btn btn-outline-primary rounded-pill px-4" @click="carregarDados">
+            <i class="bi bi-arrow-clockwise"></i> Atualizar
+        </button>
+    </div>
+
+    <div v-if="loading" class="loading-overlay">
+        <div class="spinner-border text-primary mb-2" role="status"></div>
+        <span class="text-muted">Processando dados...</span>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card card-stats shadow-sm bg-primary text-white h-100">
+                <div class="card-body">
+                    <h6 class="opacity-75">Despesas Totais (2025)</h6>
+                    <h3 class="fw-bold mb-0">{{ formatMoney(stats.total_geral) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-stats shadow-sm bg-success text-white h-100">
+                <div class="card-body">
+                    <h6 class="opacity-75">Média Trimestral</h6>
+                    <h3 class="fw-bold mb-0">{{ formatMoney(stats.media_trimestral) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-stats shadow-sm h-100 border-start border-4 border-warning">
+                <div class="card-body">
+                    <h6 class="text-muted">Maior Operadora</h6>
+                    <div v-if="stats.top_operadoras.length">
+                        <strong class="d-block text-truncate">{{ stats.top_operadoras[0].nome }}</strong>
+                        <span class="text-success fw-bold">{{ formatMoney(stats.top_operadoras[0].valor) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card shadow-sm border-0 rounded-3">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <div class="fw-bold">
+                        <i class="bi bi-bar-chart-fill"></i> Análise de Despesas
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select form-select-sm" v-model="chartMode" @change="atualizarGrafico">
+                            <option value="uf">Por UF (Estado)</option>
+                            <option value="operadora">Por Razão Social (Top 10)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                    <small v-if="chartMode === 'operadora'" class="text-muted d-block text-center mt-2">
+                        <i class="bi bi-info-circle"></i> Dica: Clique nas barras do gráfico para ver detalhes.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4 rounded-3">
+        <div class="card-body p-4">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <select class="form-select form-select-lg" v-model="filterField" @change="limparBuscaSeGeral">
+                        <option value="geral">Geral (Todos)</option>
+                        <option value="razao">Razão Social</option>
+                        <option value="registro">Registro ANS</option>
+                        <option value="cnpj">CNPJ</option>
+                        <option value="uf">UF (Estado)</option>
+                    </select>
+                </div>
+                <div class="col-md-7">
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" v-model="searchQuery"
+                               @keyup.enter="buscarOperadoras" :placeholder="placeholderBusca">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary btn-lg w-100" @click="buscarOperadoras" :disabled="filterField !== 'geral' && !searchQuery">
+                        {{ filterField === 'geral' && !searchQuery ? 'Recarregar' : 'Buscar' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-3">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="mb-0 fw-bold">Operadoras Listadas</h5>
+            <span class="badge bg-primary rounded-pill px-3 py-2">Total: {{ totalItems }}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table align-middle mb-0 table-fixed">
+                <thead class="table-light text-uppercase small text-muted">
+                    <tr>
+                        <th style="width: 13%;" class="ps-4">Registro ANS</th>
+                        <th style="width: 17%;">CNPJ</th>
+                        <th style="width: 35%;">Razão Social</th>
+
+                        <th style="width: 20%;" class="cursor-pointer" @click="alternarOrdenacao">
+                            Despesas (2025)
+                            <i class="bi" :class="iconeOrdenacao"></i>
+                        </th>
+                        <th style="width: 5%;" class="text-center">UF</th>
+                        <th style="width: 10%;" class="text-center">Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="op in operadoras" :key="op.registro_ans" class="table-row-hover">
+                        <td class="ps-4 fw-bold text-primary">{{ op.registro_ans }}</td>
+                        <td><code class="text-dark bg-light px-2 py-1 rounded border">{{ op.cnpj }}</code></td>
+
+                        <td :title="op.razao_social">
+                            <span class="truncate-text fw-bold text-dark">{{ op.razao_social }}</span>
+                        </td>
+
+                        <td class="text-success fw-bold">{{ formatMoney(op.total_despesas) }}</td>
+
+                        <td class="text-center"><span class="badge bg-info text-dark">{{ op.uf }}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-primary rounded-pill px-3" @click="abrirDetalhes(op.cnpj)">
+                                <i class="bi bi-eye-fill"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center py-3">
+            <span class="text-muted small ms-2">Página <strong>{{ page }}</strong></span>
+            <div class="me-2">
+                <button class="btn btn-sm btn-outline-secondary rounded-pill px-3 me-2" :disabled="page === 1" @click="mudarPagina(-1)">
+                    <i class="bi bi-chevron-left"></i> Anterior
+                </button>
+                <button class="btn btn-sm btn-outline-primary rounded-pill px-3" :disabled="operadoras.length < limit" @click="mudarPagina(1)">
+                    Próximo <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content" v-if="selectedOperadora">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold text-primary text-truncate w-100">{{ selectedOperadora.razao_social }}</h5>
+                    <button type="button" class="btn-close" @click="fecharModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded border h-100">
+                                <small class="text-muted d-block text-uppercase" style="font-size: 0.75rem;">Registro ANS</small>
+                                <strong class="fs-5 text-primary">{{ selectedOperadora.registro_ans }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded border h-100">
+                                <small class="text-muted d-block text-uppercase" style="font-size: 0.75rem;">CNPJ</small>
+                                <strong class="fs-5">{{ selectedOperadora.cnpj }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded border h-100">
+                                <small class="text-muted d-block text-uppercase" style="font-size: 0.75rem;">UF (Estado)</small>
+                                <strong class="fs-5">{{ selectedOperadora.uf }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded border h-100">
+                                <small class="text-muted d-block text-uppercase" style="font-size: 0.75rem;">Total Despesas (2025)</small>
+                                <strong class="fs-5 text-success">{{ formatMoney(selectedOperadora.total_despesas) }}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold mb-3 border-bottom pb-2"><i class="bi bi-clock-history"></i> Histórico Financeiro</h6>
+                    <div class="table-responsive border rounded">
+                        <table class="table table-striped mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Trimestre</th>
+                                    <th>Data Ref.</th>
+                                    <th class="text-end">Valor Lançado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="d in historico" :key="d.trimestre">
+                                    <td>{{ d.trimestre }}/{{ d.ano }}</td>
+                                    <td>{{ formatData(d.data_referencia) }}</td>
+                                    <td class="text-end fw-bold">{{ formatMoney(d.valor) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" @click="fecharModal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    const { createApp } = Vue
+
+    createApp({
+        data() {
+            return {
+                operadoras: [],
+                stats: { total_geral: 0, media_trimestral: 0, top_operadoras: [], distribuicao_uf: [] },
+                loading: false,
+                searchQuery: '',
+                filterField: 'razao',
+                chartMode: 'uf',
+                page: 1,
+                limit: 10,
+                totalItems: 0,
+                selectedOperadora: null,
+                historico: [],
+                modalInstance: null,
+                chartInstance: null,
+                sortOrder: null
+            }
+        },
+        computed: {
+            placeholderBusca() {
+                const maps = {
+                    'razao': 'Digite o nome...',
+                    'cnpj': 'Digite o CNPJ...',
+                    'uf': 'Digite a UF (ex: SP)',
+                    'registro': 'Digite o Registro ANS...',
+                    'geral': 'Digite para pesquisar em Todos...'
+                };
+                return maps[this.filterField] || 'Pesquisar...';
+            },
+            iconeOrdenacao() {
+                if (this.sortOrder === 'desc') return 'bi-sort-down-alt text-primary';
+                if (this.sortOrder === 'asc') return 'bi-sort-up text-primary';
+                return 'bi-arrow-down-up text-muted';
+            }
+        },
+        mounted() {
+            this.carregarDados();
+            this.carregarEstatisticas();
+            this.modalInstance = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+        },
+        methods: {
+            async carregarDados() {
+                this.loading = true;
+                try {
+                    const queryToSend = this.filterField === 'geral' ? '' : this.searchQuery;
+
+                    const response = await axios.get(`http://127.0.0.1:8000/api/operadoras`, {
+                        params: {
+                            page: this.page,
+                            limit: this.limit,
+                            q: queryToSend,
+                            field: this.filterField,
+                            sort_order: this.sortOrder
+                        }
+                    });
+                    this.operadoras = response.data.data;
+                    this.totalItems = response.data.meta.total;
+                } catch (error) { console.error(error); alert("Erro ao conectar com a API."); }
+                finally { this.loading = false; }
+            },
+            alternarOrdenacao() {
+                if (this.sortOrder === null) this.sortOrder = 'desc';
+                else if (this.sortOrder === 'desc') this.sortOrder = 'asc';
+                else this.sortOrder = null;
+                this.page = 1;
+                this.carregarDados();
+            },
+            async carregarEstatisticas() {
+                try {
+                    const response = await axios.get(`http://127.0.0.1:8000/api/estatisticas`);
+                    this.stats = response.data;
+                    this.atualizarGrafico();
+                } catch (error) { console.error(error); }
+            },
+            atualizarGrafico() {
+                const ctx = document.getElementById('mainChart').getContext('2d');
+                let labels = [], data = [], datasetLabel = "";
+
+                if (this.chartMode === 'uf') {
+                    const topUfs = this.stats.distribuicao_uf.slice(0, 15);
+                    labels = topUfs.map(u => u.nome);
+                    data = topUfs.map(u => u.valor);
+                    datasetLabel = "Despesas por UF (R$)";
+                } else {
+                    labels = this.stats.top_operadoras.map(op => {
+                        return op.nome.length > 20 ? op.nome.substring(0, 20) + '...' : op.nome;
+                    });
+                    data = this.stats.top_operadoras.map(op => op.valor);
+                    datasetLabel = "Top 10 Operadoras (R$)";
+                }
+
+                if (this.chartInstance) this.chartInstance.destroy();
+
+                this.chartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: datasetLabel,
+                            data: data,
+                            backgroundColor: this.chartMode === 'uf' ? 'rgba(13, 110, 253, 0.7)' : 'rgba(25, 135, 84, 0.7)',
+                            borderColor: this.chartMode === 'uf' ? 'rgba(13, 110, 253, 1)' : 'rgba(25, 135, 84, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true } },
+                        onClick: (e) => {
+                            if (this.chartMode === 'operadora') {
+                                const points = this.chartInstance.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                                if (points.length) {
+                                    const index = points[0].index;
+                                    const cnpj = this.stats.top_operadoras[index].cnpj;
+                                    this.abrirDetalhes(cnpj);
+                                }
+                            }
+                        },
+                        onHover: (event, chartElement) => {
+                            if (this.chartMode === 'operadora') {
+                                event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+                            } else {
+                                event.native.target.style.cursor = 'default';
+                            }
+                        }
+                    }
+                });
+            },
+            limparBuscaSeGeral() {
+                if (this.filterField === 'geral') {
+                    this.searchQuery = '';
+                    this.buscarOperadoras();
+                }
+            },
+            async buscarOperadoras() {
+                this.page = 1;
+                await this.carregarDados();
+            },
+            async mudarPagina(delta) {
+                this.page += delta;
+                await this.carregarDados();
+            },
+            async abrirDetalhes(cnpj) {
+                this.loading = true;
+                try {
+                    const [respOp, respHist] = await Promise.all([
+                        axios.get(`http://127.0.0.1:8000/api/operadoras/${cnpj}`),
+                        axios.get(`http://127.0.0.1:8000/api/operadoras/${cnpj}/despesas`)
+                    ]);
+                    this.selectedOperadora = respOp.data;
+                    this.historico = respHist.data;
+                    this.modalInstance.show();
+                } catch (error) { alert("Erro ao carregar detalhes."); }
+                finally { this.loading = false; }
+            },
+            fecharModal() {
+                this.modalInstance.hide();
+                this.selectedOperadora = null;
+            },
+            formatMoney(value) {
+                if (!value) return "R$ 0,00";
+                return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+            },
+            formatData(dateStr) {
+                if (!dateStr) return "-";
+                return dateStr.split('-').reverse().join('/');
+            }
+        }
+    }).mount('#app')
+</script>
+</body>
 </html>

@@ -1,119 +1,192 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
 import os
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel
 
-# 1. CRIAÇÃO DO APP (Deve vir antes das rotas)
-app = FastAPI(
-    title="IntuitiveCare - Teste Alessandro",
-    description="API de Consulta de Despesas - Versão Final (Requisito 4.2)",
-    version="2.0"
-)
+app = FastAPI(title="Intuitive Care API", version="1.0.0")
 
-# 2. CONFIGURAÇÃO DE CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- CONFIGURAÇÃO DO BANCO ---
-DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
-DIRETORIO_RAIZ = os.path.dirname(DIRETORIO_ATUAL)
-ARQUIVO_DB = os.path.join(DIRETORIO_RAIZ, "intuitive_care.db")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "intuitive_care.db")
 
-def get_conexao():
-    if not os.path.exists(ARQUIVO_DB):
-        raise HTTPException(status_code=500, detail="Banco não encontrado.")
-    conn = sqlite3.connect(ARQUIVO_DB)
+
+# --- MODELOS ---
+class OperadoraSimples(BaseModel):
+    registro_ans: str
+    cnpj: str
+    razao_social: str
+    uf: str
+    total_despesas: float  # NOVO CAMPO
+
+
+class PaginacaoResponse(BaseModel):
+    data: List[OperadoraSimples]
+    meta: Dict[str, Any]
+
+
+class OperadoraDetalhes(OperadoraSimples):
+    modalidade: str
+
+
+class Despesa(BaseModel):
+    trimestre: str
+    ano: int
+    data_referencia: str
+    valor: float
+
+
+# --- CONEXÃO ---
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-def limpar_documento(doc: str):
-    return doc.replace('.', '').replace('-', '').replace('/', '').strip()
 
-# --- ROTAS DA API ---
+# --- ROTAS ---
 
-@app.get("/api/operadoras")
-def listar_operadoras(page: int = 1, limit: int = 10, search: str = "", uf: str = ""):
-    conn = get_conexao()
-    cursor = conn.cursor()
+@app.get("/api/operadoras", response_model=PaginacaoResponse)
+def listar_operadoras(
+        page: int = Query(1, ge=1),
+        limit: int = Query(10, ge=1, le=100),
+        q: Optional[str] = Query(None),
+        field: str = Query("razao", regex="^(razao|cnpj|uf|registro|geral)$"),
+        sort_order: Optional[str] = Query(None, regex="^(asc|desc)$")  # NOVO: Ordenação
+):
     offset = (page - 1) * limit
-    query_base = "FROM operadoras_despesas WHERE 1=1"
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Base da Query
+    query_base = "FROM operadoras_despesas"
     params = []
 
-    if search:
-        term = f"%{search.strip().upper()}%"
-        term_clean = f"%{limpar_documento(search)}%"
-        query_base += """ AND (UPPER(Razao_Social) LIKE ? OR CAST(Registro_ANS AS TEXT) LIKE ? 
-                          OR REPLACE(REPLACE(REPLACE(CNPJ, '.', ''), '/', ''), '-', '') LIKE ?)"""
-        params.extend([term, term_clean, term_clean])
+    # Filtros
+    if q:
+        if field == "cnpj":
+            q_clean = q.replace('.', '').replace('/', '').replace('-', '')
+            query_base += " WHERE replace(replace(replace(CNPJ, '.', ''), '/', ''), '-', '') LIKE ?"
+            params.append(f"%{q_clean}%")
+        elif field == "uf":
+            query_base += " WHERE UF LIKE ?"
+            params.append(f"%{q}%")
+        elif field == "registro":
+            query_base += " WHERE Registro_ANS LIKE ?"
+            params.append(f"%{q}%")
+        elif field == "razao" or field == "geral":
+            query_base += " WHERE Razao_Social LIKE ?"
+            params.append(f"%{q}%")
 
-    if uf:
-        query_base += " AND UF = ?"
-        params.append(uf.upper())
+    # Contagem Total
+    query_count = f"SELECT COUNT(DISTINCT CNPJ) {query_base}"
+    total = cursor.execute(query_count, params).fetchone()[0]
 
-    cursor.execute(f"SELECT COUNT(*) as total {query_base}", params)
-    total = cursor.fetchone()["total"]
-    cursor.execute(f"SELECT * {query_base} LIMIT ? OFFSET ?", params + [limit, offset])
-    resultados = [dict(row) for row in cursor.fetchall()]
+    # ORDENAÇÃO (Lógica Nova)
+    order_clause = "ORDER BY Razao_Social"  # Padrão
+    if sort_order == "desc":
+        order_clause = "ORDER BY total_despesas DESC"
+    elif sort_order == "asc":
+        order_clause = "ORDER BY total_despesas ASC"
+
+    # Query Principal com Soma
+    # Calculamos o SUM(Total_Despesas) aqui para exibir na tabela
+    query_data = f"""
+        SELECT Registro_ANS, CNPJ, Razao_Social, UF, SUM(Total_Despesas) as total_despesas 
+        {query_base} 
+        GROUP BY CNPJ 
+        {order_clause} 
+        LIMIT ? OFFSET ?
+    """
+
+    params.extend([limit, offset])
+    rows = cursor.execute(query_data, params).fetchall()
     conn.close()
-    return {"data": resultados, "meta": {"page": page, "limit": limit, "total": total, "pages": (total // limit) + 1}}
 
-@app.get("/api/operadoras/{cnpj}")
-def obter_detalhes_operadora(cnpj: str):
-    cnpj_limpo = limpar_documento(cnpj)
-    conn = get_conexao()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM operadoras_despesas WHERE REPLACE(REPLACE(REPLACE(CNPJ, '.', ''), '/', ''), '-', '') = ?", (cnpj_limpo,))
-    row = cursor.fetchone()
-    conn.close()
-    if not row:
-        raise HTTPException(status_code=404, detail="Operadora não encontrada")
-    return dict(row)
+    dados_formatados = []
+    for row in rows:
+        dados_formatados.append({
+            "registro_ans": str(row["Registro_ANS"]),
+            "cnpj": row["CNPJ"],
+            "razao_social": row["Razao_Social"],
+            "uf": row["UF"],
+            "total_despesas": row["total_despesas"]
+        })
 
-# CORREÇÃO DO INDENTATION ERROR: Rota de Histórico com código real
-@app.get("/api/operadoras/{cnpj}/despesas")
-def obter_historico_despesas(cnpj: str):
-    cnpj_limpo = limpar_documento(cnpj)
-    conn = get_conexao()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT Data, Valor 
-        FROM historico_despesas 
-        WHERE REPLACE(REPLACE(REPLACE(CNPJ, '.', ''), '/', ''), '-', '') = ?
-        ORDER BY Data DESC
-    """, (cnpj_limpo,))
-    resultados = [dict(row) for row in cursor.fetchall()]
+    return {
+        "data": dados_formatados,
+        "meta": {"page": page, "limit": limit, "total": total, "sort": sort_order}
+    }
+
+
+@app.get("/api/operadoras/{cnpj}", response_model=OperadoraDetalhes)
+def detalhes_operadora(cnpj: str):
+    conn = get_db_connection()
+    # Pega detalhes + soma total
+    row = conn.execute("""
+                       SELECT Registro_ANS, CNPJ, Razao_Social, UF, Modalidade, SUM(Total_Despesas) as total_despesas
+                       FROM operadoras_despesas
+                       WHERE CNPJ = ?
+                       GROUP BY CNPJ
+                       """, (cnpj,)).fetchone()
     conn.close()
-    return resultados
+    if not row: raise HTTPException(404, "Não encontrado")
+
+    return {
+        "registro_ans": str(row["Registro_ANS"]),
+        "cnpj": row["CNPJ"],
+        "razao_social": row["Razao_Social"],
+        "uf": row["UF"],
+        "modalidade": row["Modalidade"],
+        "total_despesas": row["total_despesas"]
+    }
+
+
+@app.get("/api/operadoras/{cnpj}/despesas", response_model=List[Despesa])
+def historico_despesas(cnpj: str):
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT Trimestre, Ano, Data, Total_Despesas as valor FROM operadoras_despesas WHERE CNPJ = ? ORDER BY Ano, Trimestre",
+        (cnpj,)).fetchall()
+    conn.close()
+    return [{"trimestre": r["Trimestre"], "ano": r["Ano"], "data_referencia": r["Data"], "valor": r["valor"]} for r in
+            rows]
+
 
 @app.get("/api/estatisticas")
-def obter_estatisticas_agregadas():
-    conn = get_conexao()
+def obter_estatisticas():
+    conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT SUM(total_despesas) as total_despesas, AVG(total_despesas) as media_despesas FROM operadoras_despesas")
-    stats = dict(cursor.fetchone())
-    cursor.execute("SELECT Razao_Social, CNPJ, total_despesas FROM operadoras_despesas ORDER BY total_despesas DESC LIMIT 5")
-    top5 = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return {"total_despesas": stats["total_despesas"], "media_despesas": stats["media_despesas"], "top_5_operadoras": top5}
 
-@app.get("/api/ufs")
-def listar_ufs():
-    conn = get_conexao()
-    cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT UF FROM operadoras_despesas WHERE UF IS NOT NULL AND UF != 'Indefinido' ORDER BY UF")
-    ufs = [row["UF"] for row in cursor.fetchall()]
-    conn.close()
-    return ufs
+    total = cursor.execute("SELECT SUM(Total_Despesas) FROM operadoras_despesas").fetchone()[0] or 0
+    media = cursor.execute("SELECT AVG(Total_Despesas) FROM operadoras_despesas").fetchone()[0] or 0
 
-@app.get("/api/estatisticas/uf")
-def obter_despesas_por_uf():
-    conn = get_conexao()
-    cursor = conn.cursor()
-    cursor.execute("SELECT UF as Estado, SUM(total_despesas) as total FROM operadoras_despesas WHERE UF IS NOT NULL GROUP BY UF ORDER BY total DESC LIMIT 10")
-    dados = [dict(row) for row in cursor.fetchall()]
+    top_10 = cursor.execute("""
+                            SELECT Razao_Social as nome, CNPJ as cnpj, SUM(Total_Despesas) as valor
+                            FROM operadoras_despesas
+                            GROUP BY CNPJ
+                            ORDER BY valor DESC LIMIT 10
+                            """).fetchall()
+
+    uf_stats = cursor.execute("""
+                              SELECT UF as nome, SUM(Total_Despesas) as valor
+                              FROM operadoras_despesas
+                              GROUP BY UF
+                              ORDER BY valor DESC
+                              """).fetchall()
+
     conn.close()
-    return {"labels": [d["Estado"] for d in dados], "values": [d["total"] for d in dados]}
+
+    return {
+        "total_geral": total,
+        "media_trimestral": media,
+        "top_operadoras": [{"nome": r["nome"], "cnpj": r["cnpj"], "valor": r["valor"]} for r in top_10],
+        "distribuicao_uf": [{"nome": r["nome"], "valor": r["valor"]} for r in uf_stats]
+    }
