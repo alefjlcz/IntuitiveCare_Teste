@@ -53,15 +53,61 @@ O projeto foi desenvolvido observando requisitos não-funcionais críticos para 
     * **ETL (Coleta/Processamento)** separado da **API**, permitindo que o pipeline de dados rode em agendadores (como Airflow) sem impactar a performance do site.
 ---
 
-## ⚙️ Como Executar o Projeto
+## 🚀 Como Executar o Projeto
 
-Siga os passos abaixo para rodar a aplicação completa em sua máquina.
+Siga este guia passo a passo para rodar a aplicação completa em seu ambiente local.
 
 ### Pré-requisitos
-* Python 3.10 ou superior instalado.
-* Navegador Web moderno (Chrome, Edge, Firefox).
+* **Python 3.10** ou superior instalado.
+* **Git** instalado.
+* Um navegador web moderno (Chrome, Edge, Firefox).
 
-### Passo 1: Instalação das Dependências
-Abra o terminal na pasta raiz do projeto e execute:
+---
+
+### 1. Clonar o Repositório
+Baixe o código fonte para sua máquina. Abra o terminal e execute:
+
 ```bash
+git clone [https://github.com/alefjlcz/IntuitiveCare_Teste.git](https://github.com/alefjlcz/IntuitiveCare_Teste.git)
+cd IntuitiveCare_Teste
+```
+
+### Instalar Pendências
+Instale as bibliotecas necessárias (FastAPI, Pandas, Uvicorn, etc.) listadas no arquivo de requisitos:
+```
 pip install -r requirements.txt
+```
+
+### 3. Executar o Pipeline de Dados (ETL)
+Esta etapa é fundamental. O script abaixo irá conectar-se ao site da ANS, baixar os arquivos CSV mais recentes, realizar a limpeza dos dados e criar o banco de dados local (intuitive_care.db).
+```
+python main.py
+```
+
+### 4. Iniciar o Servidor (Backend)
+Com o banco de dados criado, inicie a API RESTful:
+```
+python -m uvicorn src.api:app --reload
+```
+O terminal exibirá que a aplicação está rodando em: http://127.0.0.1:8000.
+
+### 5. Acessar o Dashboard (Frontend)
+Para visualizar os dados, não é necessário instalar Node.js ou servidores adicionais.
+
+1- Navegue até a pasta interface-web/ dentro do projeto.
+
+2- Dê um duplo clique no arquivo index.html.
+
+3- O navegador abrirá o dashboard interativo conectado automaticamente à API.
+
+### 🐳 Alternativa: Execução via Docker (Nuvem)
+Caso prefira rodar a aplicação em um container isolado (sem instalar Python na sua máquina), utilize o Docker:
+
+```
+# 1. Construir a imagem
+docker build -t intuitive-app .
+
+# 2. Rodar o container
+docker run -p 8000:8000 intuitive-app
+```
+Após rodar, acesse o arquivo index.html normalmente.
