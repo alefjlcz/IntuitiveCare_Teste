@@ -58,8 +58,8 @@ def listar_operadoras(
         page: int = Query(1, ge=1),
         limit: int = Query(10, ge=1, le=100),
         q: Optional[str] = Query(None),
-        field: str = Query("razao", regex="^(razao|cnpj|uf|registro|geral)$"),
-        sort_order: Optional[str] = Query(None, regex="^(asc|desc)$")  # NOVO: Ordenação
+        field: str = Query("razao", pattern="^(razao|cnpj|uf|registro|geral)$"),
+        sort_order: Optional[str] = Query(None, pattern="^(asc|desc)$")  # NOVO: Ordenação
 ):
     offset = (page - 1) * limit
     conn = get_db_connection()

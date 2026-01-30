@@ -1,6 +1,5 @@
 # Teste Técnico - Engenharia de Dados (Intuitive Care)
 
-**Autor:** Alessandro Barbosa
 **Stack:** Python 3.10+, Pandas, SQLite, FastAPI, Vue.js (CDN)
 
 ---
@@ -34,6 +33,24 @@ O projeto foi construído com foco em **performance**, **simplicidade de execuç
 | **Frontend** | Vue.js (CDN) | Framework reativo leve. O uso via CDN elimina a necessidade de `npm install` e builds complexos. |
 | **Scraping** | BeautifulSoup4 | Parsing robusto de HTML para localizar links de arquivos dinâmicos. |
 
+## 🌟 Diferenciais Implementados
+
+O projeto foi desenvolvido observando requisitos não-funcionais críticos para ambientes produtivos:
+
+1.  **🚀 Performance & Otimização de Banco de Dados**
+    * **Paginação Server-Side:** A API utiliza cláusulas `LIMIT` e `OFFSET` no SQL. Isso impede que o banco trafegue megabytes de dados desnecessários, mantendo a resposta rápida (<50ms) mesmo com milhares de registros.
+    * **Filtros Nativos:** As buscas por texto utilizam `WHERE LIKE` diretamente no motor SQLite, sendo muito mais eficientes que filtrar listas em Python.
+
+2.  **🛡️ Qualidade de Código (QA)**
+    * Implementação de testes de integração automatizados com **Pytest**.
+    * Comando para execução: `pytest`
+
+3.  **☁️ Arquitetura Cloud-Ready (Docker)**
+    * O projeto é "Container Native". O `Dockerfile` incluso permite o deploy imediato em orquestradores como Kubernetes ou serviços Serverless (AWS Fargate, Google Cloud Run).
+    * Isolamento total de dependências.
+
+4.  **🧩 Arquitetura Desacoplada**
+    * **ETL (Coleta/Processamento)** separado da **API**, permitindo que o pipeline de dados rode em agendadores (como Airflow) sem impactar a performance do site.
 ---
 
 ## ⚙️ Como Executar o Projeto
