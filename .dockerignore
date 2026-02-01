@@ -1,0 +1,11 @@
+# Ignora arquivos pesados e temporários
+*.zip
+*.csv
+*.db
+downloads_ans/
+
+# Ignora pastas de sistema e Python
+__pycache__
+.venv
+.git
+.vscode

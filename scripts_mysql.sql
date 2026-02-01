@@ -1,6 +1,3 @@
--- ARQUIVO: queries_mysql.sql
--- AUTOR: Alessandro Barbosa
--- PROJETO: Teste Técnico Intuitive Care - Engenharia de Dados
 
 -- ==============================================================================
 -- 1. CONFIGURAÇÃO INICIAL (DDL) - REQUISITO 3.2

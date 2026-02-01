@@ -20,27 +20,19 @@ def inicializar_diretorios():
 
 
 def gerenciar_conflito_arquivo(diretorio, nome_base, extensao=".zip"):
-    """Gerencia versionamento de arquivos."""
+    """
+    Versão Docker-Friendly: Sobrescreve automaticamente sem perguntar.
+    """
     caminho_completo = os.path.join(diretorio, nome_base + extensao)
 
-    if not os.path.exists(caminho_completo):
-        return caminho_completo
+    # Se o arquivo já existe, nós apenas avisamos e deixamos o código seguir
+    # para sobrescrever. Não pedimos input.
+    if os.path.exists(caminho_completo):
+        print(f"   [INFO] O arquivo '{nome_base}{extensao}' já existe e será atualizado.")
+        # Se quiser garantir que é limpo, pode descomentar a linha abaixo:
+        # os.remove(caminho_completo)
 
-    print(f"\n[AVISO] O arquivo '{nome_base}{extensao}' já existe.")
-    while True:
-        resp = input("   Deseja substituir? (S/N): ").strip().upper()
-        if resp in ['S', 'N']: break
-
-    if resp == 'S':
-        return caminho_completo
-    else:
-        contador = 1
-        while True:
-            novo_nome = f"{nome_base}_{contador:02d}{extensao}"
-            if not os.path.exists(os.path.join(diretorio, novo_nome)):
-                print(f"   [INFO] Gerando versão: {novo_nome}")
-                return os.path.join(diretorio, novo_nome)
-            contador += 1
+    return caminho_completo
 
 
 def validar_digitos_cnpj(cnpj):
