@@ -152,14 +152,33 @@ def detalhes_operadora(cnpj: str):
 @app.get("/api/operadoras/{cnpj}/despesas", response_model=List[Despesa])
 def historico_despesas(cnpj: str):
     conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT Trimestre, Ano, Data, Total_Despesas as valor FROM operadoras_despesas WHERE CNPJ = ? ORDER BY Ano, Trimestre",
-        (cnpj,)).fetchall()
+
+    # --- CORREÇÃO AQUI ---
+    # Usamos GROUP BY para garantir que nunca venham linhas repetidas do mesmo trimestre
+    # Usamos SUM(Total_Despesas) para somar caso haja duplicidade residual
+    query = """
+            SELECT Trimestre, \
+                   Ano, \
+                   Data, \
+                   SUM(Total_Despesas) as valor
+            FROM operadoras_despesas
+            WHERE CNPJ = ?
+            GROUP BY Ano, Trimestre, Data
+            ORDER BY Ano, Trimestre \
+            """
+
+    rows = conn.execute(query, (cnpj,)).fetchall()
     conn.close()
-    return [{"trimestre": r["Trimestre"], "ano": r["Ano"], "data_referencia": r["Data"], "valor": r["valor"]} for r in
-            rows]
 
-
+    return [
+        {
+            "trimestre": r["Trimestre"],
+            "ano": r["Ano"],
+            "data_referencia": r["Data"],
+            "valor": r["valor"]
+        }
+        for r in rows
+    ]
 @app.get("/api/estatisticas")
 def obter_estatisticas():
     conn = get_db_connection()
@@ -168,18 +187,20 @@ def obter_estatisticas():
     total = cursor.execute("SELECT SUM(Total_Despesas) FROM operadoras_despesas").fetchone()[0] or 0
     media = cursor.execute("SELECT AVG(Total_Despesas) FROM operadoras_despesas").fetchone()[0] or 0
 
-    top_10 = cursor.execute("""
+    # AJUSTE 1: Query 1 pede Top 5 Operadoras (mudamos de 10 para 5)
+    top_5_ops = cursor.execute("""
                             SELECT Razao_Social as nome, CNPJ as cnpj, SUM(Total_Despesas) as valor
                             FROM operadoras_despesas
                             GROUP BY CNPJ
-                            ORDER BY valor DESC LIMIT 10
+                            ORDER BY valor DESC LIMIT 5
                             """).fetchall()
 
+    # AJUSTE 2: Query 2 pede Top 5 Estados (Adicionamos o LIMIT 5)
     uf_stats = cursor.execute("""
                               SELECT UF as nome, SUM(Total_Despesas) as valor
                               FROM operadoras_despesas
                               GROUP BY UF
-                              ORDER BY valor DESC
+                              ORDER BY valor DESC LIMIT 5
                               """).fetchall()
 
     conn.close()
@@ -187,6 +208,6 @@ def obter_estatisticas():
     return {
         "total_geral": total,
         "media_trimestral": media,
-        "top_operadoras": [{"nome": r["nome"], "cnpj": r["cnpj"], "valor": r["valor"]} for r in top_10],
+        "top_operadoras": [{"nome": r["nome"], "cnpj": r["cnpj"], "valor": r["valor"]} for r in top_5_ops],
         "distribuicao_uf": [{"nome": r["nome"], "valor": r["valor"]} for r in uf_stats]
     }

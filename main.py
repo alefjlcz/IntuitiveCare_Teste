@@ -2,7 +2,7 @@ import sqlite3
 import os
 import sys
 
-# --- IMPORTAÇÕES CORRETAS (Baseadas nos seus arquivos) ---
+# --- IMPORTAÇÕES ---
 from src.coleta import executar_coleta
 from src.processamento import executar_etl_financeiro
 
@@ -25,8 +25,8 @@ def persistir_dados_sqlite(dataset):
     try:
         conn = sqlite3.connect(DB_PATH)
 
-        # Salva a tabela consolidada (Resumo/Analítica)
-        # O processamento retorna um dict, usamos a chave 'operadoras_despesas'
+        # Salva a tabela consolidada
+        # O processamento retorna um dict, usando 'operadoras_despesas'
         if 'operadoras_despesas' in dataset and not dataset['operadoras_despesas'].empty:
             dataset['operadoras_despesas'].to_sql('operadoras_despesas', conn, if_exists='replace', index=False)
             print(f"[DB] Tabela 'operadoras_despesas' atualizada com sucesso.")
@@ -48,17 +48,17 @@ def main():
     print("=== INICIANDO ORQUESTRADOR DE DADOS ===")
 
     try:
-        # 1. ETAPA DE COLETA (Scraper)
+        # COLETA
         # O Docker vai baixar os arquivos da ANS aqui
         print("\n>>> [1/3] Iniciando Download dos Dados (Crawler)...")
         executar_coleta()
 
-        # 2. ETAPA DE PROCESSAMENTO (ETL)
+        # PROCESSAMENTO
         # Lê os arquivos baixados, processa, limpa e gera os CSVs finais
         print("\n>>> [2/3] Iniciando Processamento (ETL)...")
         resultado_etl = executar_etl_financeiro()
 
-        # 3. ETAPA DE PERSISTÊNCIA (Banco de Dados)
+        # BANCO DE DADOS
         # Pega o resultado do ETL e salva no SQLite para a API ler
         print("\n>>> [3/3] Salvando no Banco de Dados...")
         persistir_dados_sqlite(resultado_etl)

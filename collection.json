@@ -1,0 +1,86 @@
+{
+	"info": {
+		"name": "Intuitive Care Teste - Alessandro",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Listar Operadoras (Paginado)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/operadoras?page=1&limit=10",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8000",
+					"path": ["api", "operadoras"],
+					"query": [
+						{"key": "page", "value": "1"},
+						{"key": "limit", "value": "10"}
+					]
+				}
+			}
+		},
+		{
+			"name": "2. Buscar por Razão Social",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/operadoras?q=BRADESCO&field=razao",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8000",
+					"path": ["api", "operadoras"],
+					"query": [
+						{"key": "q", "value": "BRADESCO"},
+						{"key": "field", "value": "razao"}
+					]
+				}
+			}
+		},
+		{
+			"name": "3. Detalhes da Operadora",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/operadoras/00571100000104",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8000",
+					"path": ["api", "operadoras", "00571100000104"]
+				}
+			}
+		},
+		{
+			"name": "4. Histórico Financeiro",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/operadoras/00571100000104/despesas",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8000",
+					"path": ["api", "operadoras", "00571100000104", "despesas"]
+				}
+			}
+		},
+		{
+			"name": "5. Estatísticas Gerais",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/estatisticas",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8000",
+					"path": ["api", "estatisticas"]
+				}
+			}
+		}
+	]
+}

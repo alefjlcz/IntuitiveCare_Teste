@@ -25,12 +25,8 @@ def gerenciar_conflito_arquivo(diretorio, nome_base, extensao=".zip"):
     """
     caminho_completo = os.path.join(diretorio, nome_base + extensao)
 
-    # Se o arquivo já existe, nós apenas avisamos e deixamos o código seguir
-    # para sobrescrever. Não pedimos input.
     if os.path.exists(caminho_completo):
         print(f"   [INFO] O arquivo '{nome_base}{extensao}' já existe e será atualizado.")
-        # Se quiser garantir que é limpo, pode descomentar a linha abaixo:
-        # os.remove(caminho_completo)
 
     return caminho_completo
 
@@ -117,23 +113,18 @@ def gerar_relatorio_agregado_2_3(df_detalhado):
         return
 
     # Agrupamento e cálculo de métricas
-    # Agrupa por Operadora e UF, calculando métricas sobre o ValorDespesas
     df_agg = df_detalhado.groupby(['RazaoSocial', 'UF'])['ValorDespesas'].agg(
         Total_Despesas='sum',
         Media_Trimestral='mean',
-        Desvio_Padrao='std'  # Desvio padrão das despesas entre os trimestres
+        Desvio_Padrao='std'
     ).reset_index()
 
-    # Preenche desvio padrão nulo (caso só tenha 1 trimestre) com 0.0
     df_agg['Desvio_Padrao'] = df_agg['Desvio_Padrao'].fillna(0.0)
-
-    # Ordenação: Maior valor para menor (Requisito de ordenação)
     df_agg = df_agg.sort_values(by='Total_Despesas', ascending=False)
 
     print(
         f"   [INFO] Agregação concluída. Top 1: {df_agg.iloc[0]['RazaoSocial']} (R$ {df_agg.iloc[0]['Total_Despesas']:,.2f})")
 
-    # Exportação
     caminho_zip = gerenciar_conflito_arquivo(PATH_SAIDA_PROCESSADA, "Teste_Alessandro_Barbosa", ".zip")
 
     print(f"[EXPORT] Salvando Agregado em: {caminho_zip}")
@@ -142,7 +133,7 @@ def gerar_relatorio_agregado_2_3(df_detalhado):
         index=False,
         sep=';',
         encoding='utf-8-sig',
-        decimal=',',  # Formato brasileiro para visualização fácil
+        decimal=',',
         compression=dict(method='zip', archive_name='despesas_agregadas.csv')
     )
 
@@ -175,16 +166,20 @@ def executar_etl_financeiro():
 
             temp = pd.DataFrame()
             temp['PK_Registro_ANS'] = df_filtrado[col_reg].apply(sanitizar_id_ans)
+
+            # Garante que lê o trimestre corretamente (case insensitive)
             try:
-                temp['Trimestre'] = nome_pasta.split('T')[0] + 'T'
-                temp['Ano'] = nome_pasta.split('T')[1]
+                temp['Trimestre'] = nome_pasta.upper().split('T')[0] + 'T'
+                temp['Ano'] = nome_pasta.upper().split('T')[1]
             except:
-                temp['Trimestre'] = 'ND'; temp['Ano'] = 'ND'
+                temp['Trimestre'] = 'ND';
+                temp['Ano'] = 'ND'
+
             temp['ValorDespesas'] = df_filtrado[col_valor].apply(converter_valor_monetario)
 
             temp_agrupado = temp.groupby(['PK_Registro_ANS', 'Trimestre', 'Ano'])['ValorDespesas'].sum().reset_index()
             lista_dfs.append(temp_agrupado)
-            print(f"   [OK] {os.path.basename(arquivo)}")
+            print(f"   [OK] Processado: {os.path.basename(arquivo)}")
 
     if not lista_dfs: return None
 
@@ -205,10 +200,9 @@ def executar_etl_financeiro():
 
     print(f"[INFO] Registros Validados: {len(df_validos)}")
 
-    # --- EXECUTA ETAPA 2.3 (AGREGAÇÃO) ---
+    # Gera relatórios
     gerar_relatorio_agregado_2_3(df_validos)
 
-    # Gera o arquivo consolidado detalhado (Etapa 1.3)
     caminho_cons = gerenciar_conflito_arquivo(PATH_SAIDA_PROCESSADA, "consolidado_despesas", ".zip")
     df_validos[['CNPJ', 'RazaoSocial', 'Trimestre', 'Ano', 'ValorDespesas']].to_csv(
         caminho_cons, index=False, sep=';', encoding='utf-8-sig',
@@ -216,10 +210,23 @@ def executar_etl_financeiro():
     )
     print(f"[EXPORT] Consolidado Detalhado: {caminho_cons}")
 
-    # Retorno para Banco
+    # --- PREPARAÇÃO PARA O BANCO (COM CORREÇÃO DE DUPLICATAS) ---
     df_banco = df_validos.rename(
         columns={'ValorDespesas': 'Total_Despesas', 'RazaoSocial': 'Razao_Social', 'PK_Registro_ANS': 'Registro_ANS'})
-    if not df_banco.empty: df_banco['Data'] = df_banco['Trimestre'] + '/' + df_banco['Ano']
 
-    # Garante que a tabela no banco terá o nome que a API espera
+    if not df_banco.empty:
+        df_banco['Data'] = df_banco['Trimestre'] + '/' + df_banco['Ano']
+
+        # 1. Ordena para garantir que a seleção seja consistente
+        df_banco = df_banco.sort_values(by=['Registro_ANS', 'Ano', 'Trimestre'])
+
+        # 2. REMOVE DUPLICATAS: Garante apenas 1 linha por Operadora/Trimestre/Ano
+        # Isso corrige o bug de "linhas repetidas" no modal do frontend
+        linhas_antes = len(df_banco)
+        df_banco = df_banco.drop_duplicates(subset=['Registro_ANS', 'Ano', 'Trimestre'], keep='first')
+        linhas_depois = len(df_banco)
+
+        if linhas_antes != linhas_depois:
+            print(f"   [FIX] Removidas {linhas_antes - linhas_depois} linhas duplicadas antes de salvar no banco.")
+
     return {"operadoras_despesas": df_banco, "historico_despesas": df_banco}
