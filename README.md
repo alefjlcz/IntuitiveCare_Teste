@@ -6,12 +6,12 @@
 
 ---
 
-## 📋 Sobre o Projeto
+## Sobre o Projeto
 Este projeto consiste em um pipeline completo de Engenharia de Dados desenvolvido para coletar, processar e visualizar dados financeiros de operadoras de planos de saúde, utilizando dados abertos da Agência Nacional de Saúde Suplementar (ANS).
 
 O sistema automatiza desde a coleta dos arquivos até a disponibilização dos dados em um Dashboard interativo, passando por rigorosos processos de limpeza e transformação.
 
-### 🚀 Funcionalidades Principais
+### Funcionalidades Principais
 1.  **Robô de Coleta:** Monitora o site da ANS e baixa automaticamente as planilhas mais recentes de "Demonstrações Contábeis" e o "Cadastros de Operadoras".
 2.  **Pipeline ETL:**
     * Padronização de arquivos CSV (correção de encoding e delimitadores).
@@ -23,7 +23,7 @@ O sistema automatiza desde a coleta dos arquivos até a disponibilização dos d
 
 ---
 
-## 🛠️ Tecnologias e Bibliotecas
+## Tecnologias e Bibliotecas
 
 O projeto foi construído com foco em **performance**, **simplicidade de execução** e **manutenibilidade**. 
 
@@ -39,28 +39,28 @@ O projeto foi construído com foco em **performance**, **simplicidade de execuç
 
 ---
 
-## 🌟 Diferenciais Implementados
+## Diferenciais 
 
 O projeto foi desenvolvido observando requisitos não-funcionais críticos para ambientes produtivos:
 
-1.  **🚀 Performance & Otimização de Banco de Dados**
+1.  **Performance & Otimização de Banco de Dados**
     * **Paginação Server-Side:** A API utiliza cláusulas `LIMIT` e `OFFSET` no SQL. Isso impede que o banco trafegue megabytes de dados desnecessários, mantendo a resposta rápida (<50ms).
     * **Filtros Nativos:** As buscas utilizam `WHERE LIKE` diretamente no motor SQL.
 
-2.  **🛡️ Qualidade de Código (QA)**
+2.  **Qualidade de Código (QA)**
     * Implementação de testes de integração automatizados com **Pytest** para validar as rotas da API (`tests/test_api.py`).
     * Garante que endpoints críticos (`/operadoras`, `/estatisticas`) retornem status 200 e a estrutura JSON correta.
 
-3.  **☁️ Arquitetura Cloud-Ready (Docker)**
+3.  **Arquitetura Cloud-Ready (Docker)**
     * O projeto é Container Native. O `Dockerfile` incluso permite o deploy imediato em qualquer ambiente que suporte containers, garantindo isolamento total de dependências.
 
 ---
 
-## 🚀 Como Executar o Projeto
+## Como Executar o Projeto
 
 Você pode rodar este projeto de duas formas: **Via Docker (Recomendado)** ou **Manualmente (Python Local)**.
 
-### 🐳 Opção 1: Via Docker (Recomendado)
+### Opção 1: Via Docker (Recomendado)
 Este método garante que todo o ambiente seja configurado automaticamente.
 
 **Pré-requisitos:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado.
@@ -71,7 +71,7 @@ No terminal, na raiz do projeto, execute:
 docker build -t intuitive-app .
 ```
 
-### 🐍 Opção 2: Execução Manual (Local)
+### Opção 2: Execução Manual (Local)
 Caso não queira usar Docker, siga os passos abaixo.
 
 **Pré-requisitos: Python 3.10+, Git e Pip.**
@@ -104,7 +104,7 @@ Para validar a API, execute na raiz do projeto:
 pytest
 ```
 
-## 📊 Acessando o Dashboard
+## Acessando o Dashboard
 Independente de como você rodou o backend (Docker ou Manual), a forma de acessar o visual é a mesma:
 
 1. **Navegue até a pasta interface-web/ dentro do projeto.**
@@ -117,7 +117,7 @@ Independente de como você rodou o backend (Docker ou Manual), a forma de acessa
  Dica: Para ver a Documentação da API, acesse: http://localhost:8000/docs
  ```
 
-### 🧪 Testando a API (Postman)
+### Testando a API (Postman)
 Para facilitar a validação das rotas, incluí uma coleção pronta para uso.
 
 1. **Abra o Postman.**
@@ -128,7 +128,7 @@ Para facilitar a validação das rotas, incluí uma coleção pronta para uso.
 
 4. **Execute as requisições já configuradas.**
 
-## 🧠 Decisões Técnicas e Trade-offs
+## Decisões Técnicas e Trade-offs
 
 ### 1.2. Processamento de Arquivos
  * Decisão: Processamento Incremental.

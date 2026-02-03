@@ -41,21 +41,21 @@ def persistir_dados_sqlite(dataset):
     finally:
         if conn:
             conn.close()
-        print("\n=== PIPELINE FINALIZADO COM SUCESSO ===")
+        print("\n=== FINALIZADO COM SUCESSO ===")
 
 
 def main():
-    print("=== INICIANDO ORQUESTRADOR DE DADOS ===")
+    print("=== INICIANDO BUSCADOR DE DADOS ===")
 
     try:
         # COLETA
         # O Docker vai baixar os arquivos da ANS aqui
-        print("\n>>> [1/3] Iniciando Download dos Dados (Crawler)...")
+        print("\n>>> [1/3] Iniciando Download dos Dados...")
         executar_coleta()
 
         # PROCESSAMENTO
         # Lê os arquivos baixados, processa, limpa e gera os CSVs finais
-        print("\n>>> [2/3] Iniciando Processamento (ETL)...")
+        print("\n>>> [2/3] Iniciando Processamento...")
         resultado_etl = executar_etl_financeiro()
 
         # BANCO DE DADOS

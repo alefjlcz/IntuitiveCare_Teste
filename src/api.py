@@ -5,8 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
-app = FastAPI(title="Intuitive Care API", version="1.0.0")
+# --- CONFIGURAÇÃO DA APLICAÇÃO ---
+app = FastAPI(
+    title="Intuitive Care API - Monitoramento de Operadoras",
+    description="API RESTful para consulta de despesas financeiras de operadoras de planos de saúde (Dados ANS).",
+    version="1.0.0"
+)
 
+# Configuração de CORS (Permite acesso do Frontend Vue.js)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,63 +21,79 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Caminhos absolutos para garantir execução via Docker ou Local
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "intuitive_care.db")
 
 
-# --- MODELOS ---
+# --- MODELOS DE DADOS ---
 class OperadoraSimples(BaseModel):
+    """Modelo para listagem resumida na tabela principal."""
     registro_ans: str
     cnpj: str
     razao_social: str
     uf: str
-    total_despesas: float  # NOVO CAMPO
+    total_despesas: float
 
 
 class PaginacaoResponse(BaseModel):
+    """Envelope de resposta para endpoints paginados."""
     data: List[OperadoraSimples]
     meta: Dict[str, Any]
 
 
 class OperadoraDetalhes(OperadoraSimples):
+    """Modelo estendido com detalhes adicionais."""
     modalidade: str
 
 
 class Despesa(BaseModel):
+    """Modelo de histórico financeiro trimestral."""
     trimestre: str
     ano: int
     data_referencia: str
     valor: float
 
 
-# --- CONEXÃO ---
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# --- CAMADA DE ACESSO A DADOS ---
+def get_conexao_banco():
+    """
+    Estabelece conexão com o banco SQLite.
+    Configura o row_factory para retornar resultados como dicionários.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Erro de conexão com banco de dados: {e}")
 
 
-# --- ROTAS ---
+# --- ROTAS DA API ---
 
-@app.get("/api/operadoras", response_model=PaginacaoResponse)
+@app.get("/api/operadoras", response_model=PaginacaoResponse, summary="Listar Operadoras")
 def listar_operadoras(
-        page: int = Query(1, ge=1),
-        limit: int = Query(10, ge=1, le=100),
-        q: Optional[str] = Query(None),
-        field: str = Query("razao", pattern="^(razao|cnpj|uf|registro|geral)$"),
-        sort_order: Optional[str] = Query(None, pattern="^(asc|desc)$")  # NOVO: Ordenação
+        page: int = Query(1, ge=1, description="Número da página atual"),
+        limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+        q: Optional[str] = Query(None, description="Termo de busca"),
+        field: str = Query("razao", pattern="^(razao|cnpj|uf|registro|geral)$", description="Campo de filtro"),
+        sort_order: Optional[str] = Query(None, pattern="^(asc|desc)$", description="Ordenação por Total de Despesas")
 ):
+    """
+    Retorna uma lista paginada de operadoras com filtros dinâmicos e ordenação.
+    """
     offset = (page - 1) * limit
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    conexao = get_conexao_banco()
+    cursor = conexao.cursor()
 
-    # Base da Query
+    # Construção Dinâmica da Query
     query_base = "FROM operadoras_despesas"
     params = []
 
-    # Filtros
+    # Aplicação de Filtros (Busca)
     if q:
         if field == "cnpj":
+            # Sanitiza a entrada para buscar apenas números
             q_clean = q.replace('.', '').replace('/', '').replace('-', '')
             query_base += " WHERE replace(replace(replace(CNPJ, '.', ''), '/', ''), '-', '') LIKE ?"
             params.append(f"%{q_clean}%")
@@ -85,19 +107,19 @@ def listar_operadoras(
             query_base += " WHERE Razao_Social LIKE ?"
             params.append(f"%{q}%")
 
-    # Contagem Total
+    # 1. Obter Contagem Total (para a paginação no frontend)
     query_count = f"SELECT COUNT(DISTINCT CNPJ) {query_base}"
-    total = cursor.execute(query_count, params).fetchone()[0]
+    total_registros = cursor.execute(query_count, params).fetchone()[0]
 
-    # ORDENAÇÃO (Lógica Nova)
-    order_clause = "ORDER BY Razao_Social"  # Padrão
+    # 2. Definir Ordenação
+    order_clause = "ORDER BY Razao_Social"  # Ordenação padrão alfabética
     if sort_order == "desc":
         order_clause = "ORDER BY total_despesas DESC"
     elif sort_order == "asc":
         order_clause = "ORDER BY total_despesas ASC"
 
-    # Query Principal com Soma
-    # Calculamos o SUM(Total_Despesas) aqui para exibir na tabela
+    # 3. Executar Query Principal
+    # Agrupa por CNPJ para somar despesas de todos os trimestres disponíveis
     query_data = f"""
         SELECT Registro_ANS, CNPJ, Razao_Social, UF, SUM(Total_Despesas) as total_despesas 
         {query_base} 
@@ -107,37 +129,51 @@ def listar_operadoras(
     """
 
     params.extend([limit, offset])
-    rows = cursor.execute(query_data, params).fetchall()
-    conn.close()
+    resultados = cursor.execute(query_data, params).fetchall()
+    conexao.close()
 
-    dados_formatados = []
-    for row in rows:
-        dados_formatados.append({
+    # Formatação de Resposta
+    dados_formatados = [
+        {
             "registro_ans": str(row["Registro_ANS"]),
             "cnpj": row["CNPJ"],
             "razao_social": row["Razao_Social"],
             "uf": row["UF"],
             "total_despesas": row["total_despesas"]
-        })
+        }
+        for row in resultados
+    ]
 
     return {
         "data": dados_formatados,
-        "meta": {"page": page, "limit": limit, "total": total, "sort": sort_order}
+        "meta": {
+            "page": page,
+            "limit": limit,
+            "total": total_registros,
+            "sort": sort_order
+        }
     }
 
 
-@app.get("/api/operadoras/{cnpj}", response_model=OperadoraDetalhes)
+@app.get("/api/operadoras/{cnpj}", response_model=OperadoraDetalhes, summary="Detalhes da Operadora")
 def detalhes_operadora(cnpj: str):
-    conn = get_db_connection()
-    # Pega detalhes + soma total
-    row = conn.execute("""
-                       SELECT Registro_ANS, CNPJ, Razao_Social, UF, Modalidade, SUM(Total_Despesas) as total_despesas
-                       FROM operadoras_despesas
-                       WHERE CNPJ = ?
-                       GROUP BY CNPJ
-                       """, (cnpj,)).fetchone()
-    conn.close()
-    if not row: raise HTTPException(404, "Não encontrado")
+    """
+    Retorna os dados cadastrais completos e o somatório total de despesas de uma operadora específica.
+    """
+    conexao = get_conexao_banco()
+
+    query = """
+            SELECT Registro_ANS, CNPJ, Razao_Social, UF, Modalidade, SUM(Total_Despesas) as total_despesas
+            FROM operadoras_despesas
+            WHERE CNPJ = ?
+            GROUP BY CNPJ \
+            """
+
+    row = conexao.execute(query, (cnpj,)).fetchone()
+    conexao.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Operadora não encontrada")
 
     return {
         "registro_ans": str(row["Registro_ANS"]),
@@ -149,26 +185,24 @@ def detalhes_operadora(cnpj: str):
     }
 
 
-@app.get("/api/operadoras/{cnpj}/despesas", response_model=List[Despesa])
+@app.get("/api/operadoras/{cnpj}/despesas", response_model=List[Despesa], summary="Histórico de Despesas")
 def historico_despesas(cnpj: str):
-    conn = get_db_connection()
+    """
+    Retorna a evolução temporal das despesas da operadora, agrupada por Trimestre/Ano.
+    """
+    conexao = get_conexao_banco()
 
-    # --- CORREÇÃO AQUI ---
-    # Usamos GROUP BY para garantir que nunca venham linhas repetidas do mesmo trimestre
-    # Usamos SUM(Total_Despesas) para somar caso haja duplicidade residual
+    # O Group By garante a unicidade dos dados temporais
     query = """
-            SELECT Trimestre, \
-                   Ano, \
-                   Data, \
-                   SUM(Total_Despesas) as valor
+            SELECT Trimestre, Ano, Data, SUM(Total_Despesas) as valor
             FROM operadoras_despesas
             WHERE CNPJ = ?
             GROUP BY Ano, Trimestre, Data
             ORDER BY Ano, Trimestre \
             """
 
-    rows = conn.execute(query, (cnpj,)).fetchall()
-    conn.close()
+    registros = conexao.execute(query, (cnpj,)).fetchall()
+    conexao.close()
 
     return [
         {
@@ -177,25 +211,35 @@ def historico_despesas(cnpj: str):
             "data_referencia": r["Data"],
             "valor": r["valor"]
         }
-        for r in rows
+        for r in registros
     ]
-@app.get("/api/estatisticas")
-def obter_estatisticas():
-    conn = get_db_connection()
-    cursor = conn.cursor()
 
+
+@app.get("/api/estatisticas", summary="KPIs e Dashboard")
+def obter_estatisticas():
+    """
+    Retorna métricas agregadas para o Dashboard:
+    - Total Geral de Despesas
+    - Média por Trimestre
+    - Top 5 Operadoras
+    - Top 5 Estados com maiores gastos
+    """
+    conexao = get_conexao_banco()
+    cursor = conexao.cursor()
+
+    # KPIs Gerais
     total = cursor.execute("SELECT SUM(Total_Despesas) FROM operadoras_despesas").fetchone()[0] or 0
     media = cursor.execute("SELECT AVG(Total_Despesas) FROM operadoras_despesas").fetchone()[0] or 0
 
-    # AJUSTE 1: Query 1 pede Top 5 Operadoras (mudamos de 10 para 5)
+    # Query 1: Top 5 Operadoras com maior volume financeiro
     top_5_ops = cursor.execute("""
-                            SELECT Razao_Social as nome, CNPJ as cnpj, SUM(Total_Despesas) as valor
-                            FROM operadoras_despesas
-                            GROUP BY CNPJ
-                            ORDER BY valor DESC LIMIT 5
-                            """).fetchall()
+                               SELECT Razao_Social as nome, CNPJ as cnpj, SUM(Total_Despesas) as valor
+                               FROM operadoras_despesas
+                               GROUP BY CNPJ
+                               ORDER BY valor DESC LIMIT 5
+                               """).fetchall()
 
-    # AJUSTE 2: Query 2 pede Top 5 Estados (Adicionamos o LIMIT 5)
+    # Query 2: Distribuição Geográfica (Top 5 Estados)
     uf_stats = cursor.execute("""
                               SELECT UF as nome, SUM(Total_Despesas) as valor
                               FROM operadoras_despesas
@@ -203,7 +247,7 @@ def obter_estatisticas():
                               ORDER BY valor DESC LIMIT 5
                               """).fetchall()
 
-    conn.close()
+    conexao.close()
 
     return {
         "total_geral": total,

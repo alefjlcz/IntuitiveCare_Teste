@@ -5,16 +5,29 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="943d26f1-7a2d-4365-a673-0994eb2b320a" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/collection.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/Teste_IntuitiveCare_Alessandro.iml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/interface-web/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/interface-web/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/intuitive_care.db" beforeDir="false" afterPath="$PROJECT_DIR$/intuitive_care.db" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/arquivos_baixados/Relatorio_Cadop.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/arquivos_extraidos/1T2025/1T2025.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/arquivos_extraidos/2T2025/2T2025.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/downloads_ans/arquivos_extraidos/3T2025/3T2025.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/intuitive_care.db" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/planilhas_processadas/Teste_Alessandro_Barbosa.zip" beforeDir="false" afterPath="$PROJECT_DIR$/planilhas_processadas/Teste_Alessandro_Barbosa.zip" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/planilhas_processadas/consolidado_despesas.zip" beforeDir="false" afterPath="$PROJECT_DIR$/planilhas_processadas/consolidado_despesas.zip" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/planilhas_processadas/Teste_Alessandro_Barbosa.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/planilhas_processadas/consolidado_despesas.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts_mysql.sql" beforeDir="false" afterPath="$PROJECT_DIR$/scripts_mysql.sql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/__init__.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/coleta.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/coleta.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/processamento.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/processamento.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/__init__.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
